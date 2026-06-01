@@ -672,7 +672,8 @@ async function apiGet(path, params = {}) {
   const url = new URL(_surl + path);
   Object.entries(params).forEach(([k, v]) => v !== undefined && url.searchParams.set(k, v));
   try {
-    const r = await fetch(url, { headers: apiHeaders() });
+    url.searchParams.set('_t', Date.now()); // cache-bust
+    const r = await fetch(url, { headers: { ...apiHeaders(), 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' } });
     return r.ok ? r.json() : null;
   } catch { return null; }
 }
