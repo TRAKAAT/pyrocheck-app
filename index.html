@@ -1844,9 +1844,21 @@ async function doSyncWeek() {
 }
 async function doSyncAll() {
   if (!confirm('Pull ALL records from server? This may take a moment.')) return;
+  const _url = getServerUrl();
+  const _key = getApiKey();
+  if (!_url) { alert('No server URL set. Please enter the Railway URL and tap Save & Test first.'); return; }
+  // Quick health check first
+  try {
+    const hr = await fetch(_url + '/health', { headers: { 'X-API-Key': _key }, signal: AbortSignal.timeout(5000) });
+    const hd = await hr.json();
+    if (!hd.ok) { alert('Server responded but returned an error: ' + JSON.stringify(hd)); return; }
+  } catch(e) {
+    alert('Cannot reach server: ' + e.message + '\nURL: ' + _url);
+    return;
+  }
   const n = await syncFromServer(null, null);
   renderLog(); updateHomeChecks();
-  alert(`Pulled ${n || 0} new record(s) from server.`);
+  alert('Done! Pulled ' + (n || 0) + ' new record(s).\nServer: ' + _url);
 }
 async function doPullUsers() {
   await syncUsersFromServer();
