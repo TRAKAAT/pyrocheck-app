@@ -620,7 +620,6 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
       <button class="btn-secondary" onclick="doSyncToday()">⬇ Pull today's records from server</button>
       <button class="btn-secondary" onclick="doSyncWeek()">⬇ Pull this week's records</button>
       <button class="btn-secondary" onclick="doSyncAll()">⬇ Pull ALL records from server</button>
-      <button class="btn-secondary" onclick="debugPull()" style="background:var(--amber-soft);color:var(--amber);border-color:var(--amber);">🔍 Debug: Show raw server data</button>
       <button class="btn-secondary" onclick="doPushAllRecords()" style="background:var(--pink);color:#fff;font-weight:700;">⬆ Push ALL local records to server</button>
       <button class="btn-secondary" onclick="doPullUsers()">⬇ Pull operators from server</button>
       <button class="btn-secondary" onclick="doPushUsers()">⬆ Push operator list to server</button>
@@ -1923,29 +1922,7 @@ async function doPushAllRecords(){
   if(si)si.textContent='Done: '+ok+' pushed'+(fail?' | '+fail+' failed':'')+'.';
   alert('Push complete: '+ok+' records sent to server.'+(fail?' '+fail+' failed — check connection.':''));
 }
-async function debugPull(){
-  const _url=getServerUrl();
-  const _key=getApiKey();
-  alert('URL: '+(_url||'EMPTY')+'\nKey set: '+(_key?'YES':'NO'));
-  if(!_url){return;}
-  // Test 1: simple no-headers fetch to health
-  try{
-    const r1=await fetch(_url+'/health');
-    alert('Health (no headers): '+r1.status);
-  }catch(e){alert('Health failed: '+e.message);}
-  // Test 2: health with API key
-  try{
-    const r2=await fetch(_url+'/health',{headers:{'X-API-Key':_key}});
-    const d=await r2.json();
-    alert('Health (with key): '+r2.status+' '+JSON.stringify(d));
-  }catch(e){alert('Health+key failed: '+e.message);}
-  // Test 3: records simple
-  try{
-    const r3=await fetch(_url+'/api/records?limit=2',{headers:{'X-API-Key':_key}});
-    const txt=await r3.text();
-    alert('Records: '+r3.status+'\n'+txt.slice(0,300));
-  }catch(e){alert('Records failed: '+e.message);}
-}
+
 async function doFlushQueue() {
   await flushQueue();
   const q = getQueue();
@@ -1976,7 +1953,13 @@ if(navLogoEl&&typeof HEADER_B64!=='undefined'&&HEADER_B64){
 }
 renderHome();renderLog();updateBadge();tick();setInterval(tick,1000);
 // Check server connection and sync on load
-setTimeout(() => { checkServerConnection().then(() => syncUsersFromServer()); }, 1000);
+setTimeout(() => {
+  checkServerConnection().then(() => {
+    syncUsersFromServer();
+    // Auto-pull today's records silently on load
+    if(getServerUrl()) syncFromServer().catch(()=>{});
+  });
+}, 1500);
 // Retry queue every 2 minutes
 setInterval(flushQueue, 120000);
 // Init sig canvas if on settings
