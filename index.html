@@ -1844,22 +1844,52 @@ async function doSyncWeek() {
   alert(`Pulled ${n || 0} new record(s) from server for this week.`);
 }
 async function doSyncAll() {
-  if (!confirm('Pull ALL records from server? This may take a moment.')) return;
+  if (!confirm('Pull ALL records from server? This will replace local data with server data.')) return;
   const _url = getServerUrl();
   const _key = getApiKey();
   if (!_url) { alert('No server URL set. Please enter the Railway URL and tap Save & Test first.'); return; }
-  // Quick health check first
   try {
-    const hr = await fetch(_url + '/health', { headers: { 'X-API-Key': _key }, signal: AbortSignal.timeout(5000) });
+    const hr = await fetch(_url + '/health', { headers: { 'X-API-Key': _key }, signal: AbortSignal.timeout(8000) });
     const hd = await hr.json();
-    if (!hd.ok) { alert('Server responded but returned an error: ' + JSON.stringify(hd)); return; }
+    if (!hd.ok) { alert('Server error: ' + JSON.stringify(hd)); return; }
   } catch(e) {
     alert('Cannot reach server: ' + e.message + '\nURL: ' + _url);
     return;
   }
-  const n = await syncFromServer(null, null);
-  renderLog(); updateHomeChecks();
-  alert('Done! Pulled ' + (n || 0) + ' new record(s).\nServer: ' + _url);
+  // Hard pull - fetch all records and replace local DB entirely
+  try {
+    const r = await fetch(_url + '/api/records?limit=2000&_t=' + Date.now(), {
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': _key, 'Cache-Control': 'no-cache' }
+    });
+    if (!r.ok) { alert('Server returned error: ' + r.status); return; }
+    const data = await r.json();
+    if (!data.records || !data.records.length) { alert('Server has 0 records. Push from your laptop first.'); return; }
+    // Normalise and replace
+    const db2 = getDB();
+    const incoming = data.records.map(r => ({
+      ...r,
+      checkSlot:    r.checkSlot  ?? r.check_slot  ?? -1,
+      checkLabel:   r.checkLabel || r.check_label || '',
+      smokeFlag:    !!(r.smokeFlag  || r.smoke_flag),
+      odourFlag:    !!(r.odourFlag  || r.odour_flag),
+      compFlag:     !!(r.compFlag   || r.comp_flag),
+      evFlag:       !!(r.evFlag     || r.ev_flag),
+      requiresCoCT: !!(r.requiresCoCT || r.requires_coct),
+      backfill:     !!(r.backfill),
+      data:   r.data   || (r.data_json   ? JSON.parse(r.data_json)   : {}),
+      photos: r.photos || (r.photos_json ? JSON.parse(r.photos_json) : {}),
+    }));
+    // Merge: server records win, keep any local-only records
+    const serverIds = new Set(incoming.map(r => r.id));
+    const localOnly = db2.records.filter(r => !serverIds.has(r.id));
+    db2.records = [...incoming, ...localOnly];
+    db2.records.sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+    saveDB(db2);
+    renderLog(); updateHomeChecks();
+    alert('Done! ' + incoming.length + ' records loaded from server.');
+  } catch(e) {
+    alert('Pull failed: ' + e.message);
+  };
 }
 async function doPullUsers() {
   await syncUsersFromServer();
