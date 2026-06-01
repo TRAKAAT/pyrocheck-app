@@ -651,18 +651,25 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
 // ════════════════════════════════════════════════════════════════
 // SERVER CONFIG — set SERVER_URL to your Railway URL after deploy
 // ════════════════════════════════════════════════════════════════
-const SERVER_URL = localStorage.getItem('pyrocheck_server_url') || '';
-const API_KEY    = localStorage.getItem('pyrocheck_api_key')    || '';
+// Always read fresh from localStorage — never stale constants
+function getServerUrl() { return localStorage.getItem('pyrocheck_server_url') || ''; }
+function getApiKey()    { return localStorage.getItem('pyrocheck_api_key')    || ''; }
+
+// Keep these for any legacy references but they now read dynamically
+Object.defineProperty(window, 'SERVER_URL', { get: getServerUrl, configurable: true });
+Object.defineProperty(window, 'API_KEY',    { get: getApiKey,    configurable: true });
 
 function apiHeaders() {
   const h = { 'Content-Type': 'application/json' };
-  if (API_KEY) h['X-API-Key'] = API_KEY;
+  const k = getApiKey();
+  if (k) h['X-API-Key'] = k;
   return h;
 }
 
 async function apiGet(path, params = {}) {
-  if (!SERVER_URL) return null;
-  const url = new URL(SERVER_URL + path);
+  const _surl = getServerUrl();
+  if (!_surl) return null;
+  const url = new URL(_surl + path);
   Object.entries(params).forEach(([k, v]) => v !== undefined && url.searchParams.set(k, v));
   try {
     const r = await fetch(url, { headers: apiHeaders() });
@@ -671,9 +678,8 @@ async function apiGet(path, params = {}) {
 }
 
 async function apiPost(path, body) {
-  const _surl = localStorage.getItem('pyrocheck_server_url') || SERVER_URL;
+  const _surl = getServerUrl();
   if (!_surl) return null;
-  if (_surl !== SERVER_URL) Object.defineProperty(window,'SERVER_URL',{value:_surl,writable:true,configurable:true});
   try {
     const r = await fetch(_surl + path, {
       method: 'POST', headers: apiHeaders(), body: JSON.stringify(body)
@@ -683,9 +689,10 @@ async function apiPost(path, body) {
 }
 
 async function apiPut(path, body) {
-  if (!SERVER_URL) return null;
-  try {
-    const r = await fetch(SERVER_URL + path, {
+  const _surl=getServerUrl();
+  if(!_surl)return null;
+  try{
+    const r=await fetch(_surl+path, {
       method: 'PUT', headers: apiHeaders(), body: JSON.stringify(body)
     });
     return r.ok ? r.json() : null;
@@ -759,13 +766,12 @@ function addRecord(rec) {
   renderLog();
   updateBadge();
   // Push to server async
-  const _surl = localStorage.getItem('pyrocheck_server_url') || '';
-  const _akey = localStorage.getItem('pyrocheck_api_key') || '';
+  const _surl = getServerUrl();
   if (_surl) {
     setSyncStatus('syncing');
     fetch(_surl + '/api/records', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': _akey },
+      headers: apiHeaders(),
       body: JSON.stringify(rec)
     }).then(r => {
       if (r.ok) { setSyncStatus('synced'); }
@@ -790,14 +796,7 @@ async function deleteRecord(id) {
 }
 
 async function syncFromServer(dateFrom, dateTo) {
-  const _url = localStorage.getItem('pyrocheck_server_url') || SERVER_URL;
-  if (!_url) return;
-  // Ensure globals are current
-  if (_url !== SERVER_URL) {
-    Object.defineProperty(window,'SERVER_URL',{value:_url,writable:true,configurable:true});
-    const _k=localStorage.getItem('pyrocheck_api_key')||'';
-    Object.defineProperty(window,'API_KEY',{value:_k,writable:true,configurable:true});
-  }
+  if (!getServerUrl()) return;
   setSyncStatus('syncing');
   const res = await apiGet('/api/records', { dateFrom, dateTo, limit: 1000 });
   if (!res || !res.ok) { setSyncStatus('offline'); return; }
@@ -833,8 +832,7 @@ async function syncFromServer(dateFrom, dateTo) {
 }
 
 async function syncUsersFromServer() {
-  const _url = localStorage.getItem('pyrocheck_server_url') || SERVER_URL;
-  if (!_url) return;
+  if (!getServerUrl()) return;
   const res = await apiGet('/api/users');
   if (!res || !res.ok) return;
   // Merge with local users
@@ -1808,11 +1806,7 @@ async function saveServerConfig() {
   const key = document.getElementById('sync-api-key').value.trim();
   localStorage.setItem('pyrocheck_server_url', url);
   localStorage.setItem('pyrocheck_api_key', key);
-  // Update globals
-  window.SERVER_URL_CURRENT = url;
-  // Patch the const (workaround since they're const)
-  Object.defineProperty(window, 'SERVER_URL', { value: url, writable: true, configurable: true });
-  Object.defineProperty(window, 'API_KEY',    { value: key, writable: true, configurable: true });
+  // Globals now read directly from localStorage via getServerUrl()/getApiKey() - no patching needed
   const el = document.getElementById('sync-test-result');
   el.textContent = 'Testing…';
   try {
@@ -1864,7 +1858,7 @@ async function doPushUsers() {
   alert('Operator list pushed to server.');
 }
 async function doPushAllRecords(){
-  const _pushUrl=localStorage.getItem('pyrocheck_server_url')||'';
+  const _pushUrl=getServerUrl();
   if(!_pushUrl){alert('Set server URL and API key first, then Save & Test Connection.');return;}
   const db=getDB();
   const all=db.records||[];
@@ -1877,9 +1871,8 @@ async function doPushAllRecords(){
   const batchSize=50;
   for(let i=0;i<all.length;i+=batchSize){
     const batch=all.slice(i,i+batchSize);
-    const _bkey2=localStorage.getItem('pyrocheck_api_key')||'';
     let res=null;
-    try{const _br=await fetch(_pushUrl+'/api/records/batch',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':_bkey2},body:JSON.stringify({records:batch})});res=_br.ok?await _br.json():null;}catch(e){console.error('Batch push error:',e);}
+    try{const _br=await fetch(_pushUrl+'/api/records/batch',{method:'POST',headers:apiHeaders(),body:JSON.stringify({records:batch})});res=_br.ok?await _br.json():null;}catch(e){console.error('Batch push error:',e);}
     if(res){ok+=batch.length;}else{fail+=batch.length;}
   }
   setSyncStatus(fail===0?'synced':'offline');
