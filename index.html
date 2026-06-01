@@ -620,6 +620,7 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
       <button class="btn-secondary" onclick="doSyncToday()">⬇ Pull today's records from server</button>
       <button class="btn-secondary" onclick="doSyncWeek()">⬇ Pull this week's records</button>
       <button class="btn-secondary" onclick="doSyncAll()">⬇ Pull ALL records from server</button>
+      <button class="btn-secondary" onclick="debugPull()" style="background:var(--amber-soft);color:var(--amber);border-color:var(--amber);">🔍 Debug: Show raw server data</button>
       <button class="btn-secondary" onclick="doPushAllRecords()" style="background:var(--pink);color:#fff;font-weight:700;">⬆ Push ALL local records to server</button>
       <button class="btn-secondary" onclick="doPullUsers()">⬇ Pull operators from server</button>
       <button class="btn-secondary" onclick="doPushUsers()">⬆ Push operator list to server</button>
@@ -1921,6 +1922,21 @@ async function doPushAllRecords(){
   setSyncStatus(fail===0?'synced':'offline');
   if(si)si.textContent='Done: '+ok+' pushed'+(fail?' | '+fail+' failed':'')+'.';
   alert('Push complete: '+ok+' records sent to server.'+(fail?' '+fail+' failed — check connection.':''));
+}
+async function debugPull(){
+  const _url=getServerUrl();
+  const _key=getApiKey();
+  if(!_url){alert('No URL set');return;}
+  try{
+    const r=await fetch(_url+'/api/records?limit=5&_t='+Date.now(),{
+      headers:{'X-API-Key':_key,'Cache-Control':'no-cache'}
+    });
+    const txt=await r.text();
+    const preview=txt.slice(0,500);
+    alert('Status: '+r.status+'\nLength: '+txt.length+' chars\nPreview:\n'+preview);
+  }catch(e){
+    alert('Fetch error: '+e.message);
+  }
 }
 async function doFlushQueue() {
   await flushQueue();
