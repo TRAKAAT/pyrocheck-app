@@ -470,15 +470,35 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
 </div>
 </div>
 
-<!-- ALARMS / MISSED CHECKS -->
+<!-- OUTSTANDING CHECKS CALENDAR -->
 <div class="screen" id="screen-alarms">
 <div class="screen-content">
-  <div class="screen-title">⏰ Missed Check Alarms</div>
-  <div class="screen-sub" id="alarm-shift-label">Current shift</div>
+  <div class="screen-title">📅 Outstanding Checks</div>
+  <div class="screen-sub">Historical missed inspections by date</div>
   <div style="background:var(--amber-soft);border:1px solid rgba(245,158,11,0.3);border-radius:var(--radius-xs);padding:10px 14px;margin:10px 0 14px;font-size:12px;color:var(--amber);">
-    Shows checks that were missed in the <strong>current shift</strong>. Tap a missed check to fill it in now using backfill. The inspection time will be logged as the time you fill it in.
+    Tap a <strong style="color:var(--red)">red date</strong> to view missed checks by shift. Current shift misses are shown on the Home screen.
   </div>
-  <div id="alarm-list"></div>
+
+  <!-- Calendar nav -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <button onclick="alarmCalPrev()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-xs);width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
+    <div id="alarm-cal-month" style="font-size:15px;font-weight:700;"></div>
+    <button onclick="alarmCalNext()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:var(--radius-xs);width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
+  </div>
+
+  <!-- Day labels -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px;" id="alarm-cal-labels"></div>
+  <!-- Calendar grid -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;" id="alarm-cal-grid"></div>
+
+  <!-- Legend -->
+  <div style="display:flex;gap:14px;margin:10px 0 4px;">
+    <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);"><div style="width:10px;height:10px;border-radius:3px;background:var(--red-soft);border:1px solid rgba(239,68,68,0.5);"></div>Missed checks</div>
+    <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);"><div style="width:10px;height:10px;border-radius:3px;background:var(--blue-soft);border:1px solid rgba(59,130,246,0.4);"></div>Today</div>
+  </div>
+
+  <!-- Detail panel -->
+  <div id="alarm-detail-panel" style="margin-top:6px;"></div>
 </div>
 </div>
 
@@ -566,10 +586,10 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
   </button>
   <button class="tab-btn" onclick="showScreen('screen-alarms');renderAlarms()" id="tab-alarms">
     <div class="tab-icon-wrap">
-      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       <span class="badge-dot" id="alarm-badge" style="display:none"></span>
     </div>
-    <span class="tab-label">Alarms</span>
+    <span class="tab-label">Outstanding</span>
   </button>
   <button class="tab-btn" onclick="showScreen('screen-settings');loadSettingsUI()">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -1050,73 +1070,166 @@ function updateShiftUI(){
   const done=[0,1,2].filter(i=>getCheckStatus(i)==='done').length;
   document.getElementById('checks-badge').textContent=`${done}/3 checks`;
 }
-function renderAlarms(){
-  const el=document.getElementById('alarm-list');
-  if(!el)return;
+// ════════════ OUTSTANDING CHECKS CALENDAR ════════════
+let alarmCalYear=new Date().getFullYear();
+let alarmCalMonth=new Date().getMonth();
+let alarmCalSelected=null;
+
+const ALARM_CAL_DAYS=['Su','Mo','Tu','We','Th','Fr','Sa'];
+const ALARM_CAL_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function alarmDateKey(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
+function todayKey(){const n=new Date();return alarmDateKey(n.getFullYear(),n.getMonth(),n.getDate());}
+
+// Get all days that have missed checks from DB
+function getMissedDaysMap(){
+  const db=getDB();
+  const map={};
   const now=new Date();
-  const hour=now.getHours();
-  // Day shift: 07:00-19:00, Night shift: 19:00-07:00
-  // Determine actual current shift from clock time
-  const isDay=hour>=7&&hour<19;
-
-  // Shift boundaries
-  const shiftStart=new Date(now);
-  if(isDay){
-    shiftStart.setHours(7,0,0,0);
-  } else {
-    // Night shift starts 19:00 - if past midnight, start was yesterday at 19:00
-    shiftStart.setHours(19,0,0,0);
-    if(hour<7) shiftStart.setDate(shiftStart.getDate()-1); // past midnight
-  }
-  const shiftEnd=new Date(shiftStart);
-  shiftEnd.setHours(shiftEnd.getHours()+12);
-
-  // Fixed check times: day 07:00, 11:00, 15:00 / night 19:00, 23:00, 03:00
-  const checkTimes=isDay
-    ? [7,11,15].map(h=>{const d=new Date(shiftStart);d.setHours(h,0,0,0);return d;})
-    : [19,23,3].map((h,i)=>{
-        const d=new Date(shiftStart);
-        if(i===2){d.setDate(d.getDate()+1);} // 03:00 is next calendar day
-        d.setHours(h,0,0,0);
-        return d;
-      });
-
-  const db2=getDB();
-  const shiftRecs=db2.records.filter(r=>{
+  const todayStr=todayKey();
+  db.records.filter(r=>r.type==='check').forEach(r=>{
     const t=new Date(r.timestamp);
-    const shiftName=isDay?'day':'night';
-    return r.type==='check'&&t>=shiftStart&&t<=shiftEnd&&(r.shift===shiftName||!r.shift);
+    const dk=t.toLocaleDateString('en-CA');
+    if(dk>=todayStr) return; // skip today and future (shown on home)
+    if(!map[dk]) map[dk]={day:[],night:[]};
+    const shift=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
+    map[dk][shift].push(r);
   });
-  const doneSlots=new Set(shiftRecs.map(r=>r.checkSlot));
-
-  const lbl=document.getElementById('alarm-shift-label');
-  const shiftName=isDay?'day':'night';
-  if(lbl)lbl.textContent=(isDay?'Day':'Night')+' Shift — '+shiftStart.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})+' to '+shiftEnd.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
-
-  let html='',missed=0;
-  checkTimes.forEach((ct,i)=>{
-    const isDone=doneSlots.has(i);
-    const isPast=now>ct;
-    const isMissed=isPast&&!isDone;
-    if(isMissed)missed++;
-    const timeStr=ct.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
-    const statusClass=isDone?'done':isMissed?'missed':'upcoming';
-    const statusIcon=isDone?'✅':isMissed?'🚨':'🕐';
-    const statusTxt=isDone?'Completed':isMissed?'MISSED — fill in now':'Upcoming';
-    html+=`<div class="alarm-item ${statusClass}">
-      <div>
-        <div class="alarm-label">${statusIcon} Check ${i+1}</div>
-        <div class="alarm-time">Due: ${timeStr} · ${statusTxt}</div>
-      </div>
-      ${isMissed?`<button class="alarm-fill-btn" onclick="startAlarmBackfill(${i})">Fill In</button>`:''}
-      ${isDone?`<div class="alarm-done-lbl">✓ Done</div>`:''}
-    </div>`;
+  // Now find which dates have MISSED slots (i.e. not all 3 check slots done)
+  const missedMap={};
+  Object.keys(map).forEach(dk=>{
+    ['day','night'].forEach(sh=>{
+      const recs=map[dk][sh];
+      const doneSlots=new Set(recs.map(r=>r.checkSlot));
+      const checkHours=sh==='day'?[7,11,15]:[19,23,3];
+      const missed=checkHours.filter((_,i)=>!doneSlots.has(i));
+      if(missed.length>0){
+        if(!missedMap[dk]) missedMap[dk]={};
+        missedMap[dk][sh]=missed.map((h,i)=>({slot:checkHours.indexOf(h),time:(h<10?'0':'')+h+':00'}));
+      }
+    });
   });
-  el.innerHTML=html||'<div style="text-align:center;padding:40px;color:var(--muted);">No checks scheduled yet for this shift.</div>';
+  return missedMap;
+}
 
-  // Update badge
+function renderAlarms(){
+  // Render calendar
+  alarmCalSelected=null;
+  renderAlarmCalendar();
+  document.getElementById('alarm-detail-panel').innerHTML='<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;">Tap a red date to view missed checks</div>';
+
+  // Update badge — count total outstanding missed checks across all past dates
+  const missedMap=getMissedDaysMap();
+  const totalMissed=Object.values(missedMap).reduce((sum,day)=>{
+    return sum+(day.day?day.day.length:0)+(day.night?day.night.length:0);
+  },0);
   const badge=document.getElementById('alarm-badge');
-  if(badge)badge.style.display=missed>0?'block':'none';
+  if(badge) badge.style.display=totalMissed>0?'block':'none';
+}
+
+function renderAlarmCalendar(){
+  const labelsEl=document.getElementById('alarm-cal-labels');
+  const gridEl=document.getElementById('alarm-cal-grid');
+  const monthEl=document.getElementById('alarm-cal-month');
+  if(!labelsEl||!gridEl||!monthEl) return;
+
+  monthEl.textContent=ALARM_CAL_MONTHS[alarmCalMonth]+' '+alarmCalYear;
+  labelsEl.innerHTML=ALARM_CAL_DAYS.map(d=>`<div style="text-align:center;font-size:10px;font-weight:700;color:var(--muted);padding:3px 0;text-transform:uppercase;letter-spacing:0.3px;">${d}</div>`).join('');
+
+  const missedMap=getMissedDaysMap();
+  const firstDay=new Date(alarmCalYear,alarmCalMonth,1).getDay();
+  const daysInMonth=new Date(alarmCalYear,alarmCalMonth+1,0).getDate();
+  const today=todayKey();
+
+  let cells='';
+  for(let i=0;i<firstDay;i++) cells+=`<div></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const dk=alarmDateKey(alarmCalYear,alarmCalMonth,d);
+    const isMissed=!!missedMap[dk];
+    const isToday=dk===today;
+    const isFuture=dk>today;
+    const isSelected=dk===alarmCalSelected;
+
+    let bg,border,color,cursor='default';
+    if(isSelected){bg='rgba(233,30,140,0.2)';border='1px solid var(--pink)';color='var(--pink)';cursor='pointer';}
+    else if(isToday){bg='var(--blue-soft)';border='1px solid rgba(59,130,246,0.4)';color='var(--blue)';}
+    else if(isMissed){bg='var(--red-soft)';border='1px solid rgba(239,68,68,0.5)';color='var(--red)';cursor='pointer';}
+    else if(isFuture){bg='transparent';border='1px solid transparent';color='rgba(255,255,255,0.15)';}
+    else{bg='var(--surface)';border='1px solid var(--border2)';color='var(--muted)';}
+
+    const onclick=isMissed?`onclick="alarmCalSelectDate('${dk}',${d})"`:isToday?`onclick="alarmCalSelectDate('${dk}',${d})"` :'';
+    cells+=`<div ${onclick} style="aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;background:${bg};border:${border};color:${color};cursor:${cursor};position:relative;transition:all .15s;">
+      ${d}
+      ${isMissed&&!isSelected?`<div style="width:4px;height:4px;background:var(--red);border-radius:50%;position:absolute;bottom:3px;left:50%;transform:translateX(-50%);"></div>`:''}
+    </div>`;
+  }
+  gridEl.innerHTML=cells;
+}
+
+function alarmCalSelectDate(dk,d){
+  alarmCalSelected=dk;
+  renderAlarmCalendar();
+
+  const missedMap=getMissedDaysMap();
+  const detail=document.getElementById('alarm-detail-panel');
+  if(!detail) return;
+
+  const dayMissed=missedMap[dk];
+  const dateParts=dk.split('-');
+  const label=d+' '+ALARM_CAL_MONTHS[parseInt(dateParts[1])-1]+' '+dateParts[0];
+
+  if(!dayMissed){
+    detail.innerHTML=`<div style="background:var(--green-soft);border:1px solid rgba(16,185,129,0.4);border-radius:var(--radius-xs);padding:12px 14px;font-size:13px;color:var(--green);text-align:center;">✅ No missed checks on ${label}</div>`;
+    return;
+  }
+
+  function shiftBlock(title,shiftKey,checks,icon,badgeColor,badgeBg){
+    if(!checks||checks.length===0) return '';
+    const time=shiftKey==='day'?'07:00 – 19:00':'19:00 – 07:00';
+    const rows=checks.map((c,i)=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border2);">
+        <div>
+          <div style="font-size:13px;font-weight:700;">🚨 Check ${c.slot+1}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px;">Due: ${c.time} · MISSED</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="font-size:11px;font-weight:700;color:var(--red);background:var(--red-soft);border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:2px 7px;">MISSED</div>
+          <button onclick="startAlarmBackfillDate('${dk}','${shiftKey}',${c.slot})" style="background:var(--pink);border:none;color:#fff;border-radius:var(--radius-xs);padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);">Fill In</button>
+        </div>
+      </div>`).join('');
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xs);margin-bottom:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border2);">
+        <span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${badgeBg};color:${badgeColor};border:1px solid ${badgeColor}30;">${icon} ${title.toUpperCase()}</span>
+        <span style="font-size:12px;color:var(--muted);">${time}</span>
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  detail.innerHTML=`
+    <div style="font-size:12px;font-weight:700;color:var(--pink);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">📅 ${label}</div>
+    ${shiftBlock('Day Shift','day',dayMissed.day,'☀️','#f59e0b','rgba(245,158,11,0.12)')}
+    ${shiftBlock('Night Shift','night',dayMissed.night,'🌙','#3b82f6','rgba(59,130,246,0.12)')}
+  `;
+}
+
+function alarmCalPrev(){
+  alarmCalMonth--;
+  if(alarmCalMonth<0){alarmCalMonth=11;alarmCalYear--;}
+  alarmCalSelected=null;
+  renderAlarmCalendar();
+  document.getElementById('alarm-detail-panel').innerHTML='<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;">Tap a red date to view missed checks</div>';
+}
+function alarmCalNext(){
+  alarmCalMonth++;
+  if(alarmCalMonth>11){alarmCalMonth=0;alarmCalYear++;}
+  alarmCalSelected=null;
+  renderAlarmCalendar();
+  document.getElementById('alarm-detail-panel').innerHTML='<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px;">Tap a red date to view missed checks</div>';
+}
+
+function startAlarmBackfillDate(dateStr,shift,slot){
+  promptOperator('check',slot,true,dateStr,shift);
 }
 
 function startAlarmBackfill(slot){
