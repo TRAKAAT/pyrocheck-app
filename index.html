@@ -625,16 +625,16 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
 </div>
 
 <!-- EDIT RECORD MODAL -->
-<div id="edit-record-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:250;display:none;align-items:flex-end;justify-content:center;">
+<div id="edit-rec-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:250;display:none;align-items:flex-end;justify-content:center;">
   <div style="background:var(--navy2);border-radius:20px 20px 0 0;width:100%;max-height:92dvh;overflow-y:auto;padding:20px 16px calc(var(--safe-bot)+20px);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div style="font-size:17px;font-weight:700;" id="edit-rec-title">Edit Record</div>
-      <button onclick="closeEditRecord()" style="background:var(--surface);border:none;color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+      <div style="font-size:17px;font-weight:700;">Edit Record</div>
+      <button onclick="closeEditRec()" style="background:var(--surface);border:none;color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;">✕</button>
     </div>
     <div id="edit-rec-body"></div>
     <div style="display:flex;gap:10px;margin-top:16px;">
-      <button onclick="closeEditRecord()" style="flex:1;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:600;color:var(--white);cursor:pointer;">Cancel</button>
-      <button onclick="saveEditRecord()" style="flex:1;padding:13px;background:var(--pink);border:none;border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:700;color:#fff;cursor:pointer;">Save Changes</button>
+      <button onclick="closeEditRec()" style="flex:1;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:600;color:var(--white);cursor:pointer;">Cancel</button>
+      <button onclick="saveEditRec()" style="flex:1;padding:13px;background:var(--pink);border:none;border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:700;color:#fff;cursor:pointer;">Save Changes</button>
     </div>
   </div>
 </div>
@@ -1730,60 +1730,83 @@ function renderEditList(){
   }).join('');
 }
 function confirmDelete(id){if(confirm('Delete this record? This cannot be undone.'))deleteRecord(id);}
-
 let _editRecId=null;
 function editRecord(id){
   const db=getDB(),rec=db.records.find(r=>r.id===id);if(!rec)return;
   _editRecId=id;
-  const t=new Date(rec.timestamp);
-  const dk=t.toLocaleDateString('en-CA');
-  const tm=fmtTime(rec.timestamp);
-  document.getElementById('edit-rec-title').textContent=(rec.checkLabel||'Record')+' — '+fmtDate(rec.timestamp);
-  const flagColor=rec.flag==='alert'?'var(--red)':rec.flag==='warn'?'var(--amber)':'var(--green)';
-  const issues=[];
-  if(rec.smokeFlag)issues.push('🔥 Smoke');
-  if(rec.odourFlag)issues.push('👃 Odour');
-  if(rec.compFlag)issues.push('📣 Complaint');
-  if(rec.evFlag)issues.push('⚙️ Event');
-  if(!issues.length)issues.push('✅ All clear');
-
+  const users=getUsers();
+  const userOpts=users.map(u=>'<option value="'+u.name+'" '+(u.name===rec.operator?'selected':'')+'>'+u.name+'</option>').join('');
+  const inspTime=(rec.data&&rec.data.inspection_time?rec.data.inspection_time.substring(0,5):'');
+  const inspDate=(rec.data&&rec.data.inspection_date?rec.data.inspection_date:new Date(rec.timestamp).toLocaleDateString('en-CA'));
+  const flags=['smokeFlag','odourFlag','compFlag','evFlag'];
+  const flagLabels={'smokeFlag':'🔥 Smoke','odourFlag':'👃 Odour','compFlag':'📣 Complaint','evFlag':'⚙️ Event'};
   document.getElementById('edit-rec-body').innerHTML=
-    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xs);padding:12px 14px;margin-bottom:14px;">'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Check</div><div style="font-size:14px;font-weight:700;">'+(rec.checkLabel||'—')+'</div></div>'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Operator</div><div style="font-size:14px;font-weight:700;">'+(rec.operator||'—')+'</div></div>'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Date</div><div style="font-size:14px;font-weight:700;">'+fmtDate(rec.timestamp)+'</div></div>'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Time</div><div style="font-size:14px;font-weight:700;">'+(rec.data&&rec.data.inspection_time?rec.data.inspection_time:tm)+'</div></div>'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Shift</div><div style="font-size:14px;font-weight:700;">'+(rec.shift==='day'?'☀️ Day':'🌙 Night')+'</div></div>'
-        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Status</div><div style="font-size:14px;font-weight:700;color:'+flagColor+';">'+(rec.flag||'ok').toUpperCase()+'</div></div>'
-      +'</div>'
-      +'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);">'
-        +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:5px;">Flags</div>'
-        +'<div style="font-size:13px;">'+issues.join(' · ')+'</div>'
-      +'</div>'
-      +(rec.data&&rec.data.gen_notes?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:5px;">Notes</div><div style="font-size:13px;">'+rec.data.gen_notes+'</div></div>':'')
+    // Operator
+    '<div class="fu-row"><label>Operator</label>'
+    +'<select class="fu-select" id="er-operator"><option value="">— select —</option>'+userOpts+'<option value="__manual__">Type manually...</option></select>'
+    +'<input class="fu-input" id="er-op-manual" placeholder="Type name" style="display:'+(users.find(u=>u.name===rec.operator)?'none':'block')+';margin-top:6px;" value="'+(users.find(u=>u.name===rec.operator)?'':rec.operator||'')+'"></div>'
+    // Check
+    +'<div class="fu-row"><label>Check Number</label>'
+    +'<div style="display:flex;gap:8px;">'
+    +['Check 1','Check 2','Check 3'].map((l,i)=>'<button class="shift-pick-btn '+(rec.checkSlot===i?'active':'')+'" onclick="[0,1,2].forEach(j=>{const b=document.getElementById('er-slot-'+j);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot='+i+';" id="er-slot-'+i+'">'+l+'</button>').join('')
+    +'</div></div>'
+    // Shift
+    +'<div class="fu-row"><label>Shift</label>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button class="shift-pick-btn '+(rec.shift==='day'?'active':'')+'" id="er-day" onclick="document.getElementById('er-day').classList.add('active');document.getElementById('er-night').classList.remove('active');window._erShift='day';">☀️ Day</button>'
+    +'<button class="shift-pick-btn '+(rec.shift==='night'?'active':'')+'" id="er-night" onclick="document.getElementById('er-night').classList.add('active');document.getElementById('er-day').classList.remove('active');window._erShift='night';">🌙 Night</button>'
+    +'</div></div>'
+    // Date & Time
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div class="fu-row" style="margin:0"><label>Date</label><input class="fu-input" type="date" id="er-date" value="'+inspDate+'"></div>'
+    +'<div class="fu-row" style="margin:0"><label>Time</label><input class="fu-input" type="time" id="er-time" value="'+inspTime+'"></div>'
     +'</div>'
-    +'<div class="fu-row"><label>Operator</label><input class="fu-input" id="edit-op" value="'+(rec.operator||'')+'"></div>'
-    +'<div class="fu-row"><label>Inspection Time</label><input class="fu-input" id="edit-time" type="time" value="'+(rec.data&&rec.data.inspection_time?rec.data.inspection_time.substring(0,5):'')+'"></div>'
-    +'<div class="fu-row"><label>General Notes</label><textarea class="fu-textarea" id="edit-notes">'+(rec.data&&rec.data.gen_notes?rec.data.gen_notes:'')+'</textarea></div>';
-
-  document.getElementById('edit-record-overlay').style.display='flex';
+    // Flags
+    +'<div class="fu-row" style="margin-top:14px;"><label>Flags</label>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px;">'
+    +flags.map(f=>'<button class="shift-pick-btn '+(rec[f]?'active':'')+'" id="er-'+f+'" onclick="this.classList.toggle('active');">'+flagLabels[f]+'</button>').join('')
+    +'</div></div>'
+    // Notes
+    +'<div class="fu-row"><label>General Notes</label><textarea class="fu-textarea" id="er-notes">'+(rec.data&&rec.data.gen_notes?rec.data.gen_notes:'')+'</textarea></div>';
+  window._erSlot=rec.checkSlot>=0?rec.checkSlot:0;
+  window._erShift=rec.shift||'day';
+  // Operator manual toggle
+  const sel=document.getElementById('er-operator');
+  if(sel) sel.addEventListener('change',function(){
+    document.getElementById('er-op-manual').style.display=this.value==='__manual__'?'block':'none';
+  });
+  document.getElementById('edit-rec-overlay').style.display='flex';
 }
-function closeEditRecord(){
-  document.getElementById('edit-record-overlay').style.display='none';
-  _editRecId=null;
-}
-function saveEditRecord(){
+function closeEditRec(){document.getElementById('edit-rec-overlay').style.display='none';_editRecId=null;}
+function saveEditRec(){
   if(!_editRecId)return;
   const db=getDB(),rec=db.records.find(r=>r.id===_editRecId);if(!rec)return;
-  const op=document.getElementById('edit-op').value.trim();
-  const time=document.getElementById('edit-time').value;
-  const notes=document.getElementById('edit-notes').value.trim();
+  const opSel=document.getElementById('er-operator').value;
+  const op=opSel==='__manual__'?document.getElementById('er-op-manual').value.trim():opSel||rec.operator;
+  const date=document.getElementById('er-date').value||new Date(rec.timestamp).toLocaleDateString('en-CA');
+  const time=document.getElementById('er-time').value;
+  const slot=typeof window._erSlot==='number'?window._erSlot:rec.checkSlot;
+  const shift=window._erShift||rec.shift;
+  const notes=document.getElementById('er-notes').value.trim();
+  const smoke=document.getElementById('er-smokeFlag')?.classList.contains('active')||false;
+  const odour=document.getElementById('er-odourFlag')?.classList.contains('active')||false;
+  const comp=document.getElementById('er-compFlag')?.classList.contains('active')||false;
+  const ev=document.getElementById('er-evFlag')?.classList.contains('active')||false;
+  const flag=smoke||odour||comp||ev?'alert':'ok';
+  // Build new timestamp from date+time
+  let ts=rec.timestamp;
+  if(date){
+    const [h,m]=(time||'00:00').split(':');
+    ts=new Date(date+'T'+String(h||0).padStart(2,'0')+':'+String(m||0).padStart(2,'0')+':00').toISOString();
+  }
   updateRecord(_editRecId,{
-    operator:op||rec.operator,
-    data:{...rec.data,inspection_time:time||rec.data.inspection_time,gen_notes:notes}
+    operator:op,shift,checkSlot:slot,
+    checkLabel:'Check '+(slot+1),
+    flag,smokeFlag:smoke,odourFlag:odour,compFlag:comp,evFlag:ev,
+    timestamp:ts,
+    data:{...rec.data,inspection_time:time,inspection_date:date,gen_notes:notes}
   });
-  closeEditRecord();
+  closeEditRec();
   renderEditList();
 }
 function openAddBackfill(){
@@ -2084,7 +2107,7 @@ async function doSyncAll() {
 }
 async function doPullUsers() {
   await syncUsersFromServer();
-  renderSettings();
+  loadSettingsUI();
   alert('Operators pulled from server.');
 }
 async function doPushUsers() {
