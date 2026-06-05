@@ -1107,24 +1107,38 @@ function getMissedDaysMap(){
   const todayStr=todayKey();
   const done={};
   const activeDays={};
-  // Collect ALL check records regardless of checkSlot value
   db.records.filter(r=>r.type==='check').forEach(r=>{
     const t=new Date(r.timestamp);
-    const dk=(r.data&&r.data.inspection_date&&String(r.data.inspection_date).trim().length>=8)
-      ? String(r.data.inspection_date).trim().substring(0,10)
-      : t.toLocaleDateString('en-CA');
+    let dk;
+    if(r.data&&r.data.inspection_date&&String(r.data.inspection_date).trim().length>=8){
+      dk=String(r.data.inspection_date).trim().substring(0,10);
+    } else {
+      dk=dateToKey(t);
+    }
     if(dk>=todayStr) return;
     const sh=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
     activeDays[dk]=true;
-    // Only mark slot done if checkSlot is valid (0,1,2)
-    if(r.checkSlot>=0&&r.checkSlot<=2){
+    if(typeof r.checkSlot==='number'&&r.checkSlot>=0&&r.checkSlot<=2){
+      // Valid slot — mark just that slot done
       done[dk+'|'+sh+'|'+r.checkSlot]=true;
+    } else {
+      // slot=-1 means record exists but slot unknown — treat whole shift as complete
+      done[dk+'|'+sh+'|0']=true;
+      done[dk+'|'+sh+'|1']=true;
+      done[dk+'|'+sh+'|2']=true;
     }
   });
   const missedMap={};
   Object.keys(activeDays).forEach(dk=>{
     ['day','night'].forEach(sh=>{
-      const slots=[{slot:0,time:sh==='day'?'07:00':'19:00'},{slot:1,time:sh==='day'?'11:00':'23:00'},{slot:2,time:sh==='day'?'15:00':'03:00'}];
+      // Only check this shift if at least one record exists for it
+      const shiftHasAnyRecord=done[dk+'|'+sh+'|0']||done[dk+'|'+sh+'|1']||done[dk+'|'+sh+'|2'];
+      if(!shiftHasAnyRecord) return;
+      const slots=[
+        {slot:0,time:sh==='day'?'07:00':'19:00'},
+        {slot:1,time:sh==='day'?'11:00':'23:00'},
+        {slot:2,time:sh==='day'?'15:00':'03:00'}
+      ];
       const missed=slots.filter(c=>!done[dk+'|'+sh+'|'+c.slot]);
       if(missed.length>0){
         if(!missedMap[dk])missedMap[dk]={};
@@ -1234,8 +1248,6 @@ function alarmCalSelectDate(dk,dayNum){
     wrap.appendChild(card);
   });
   detail.appendChild(wrap);
-  // Scroll detail panel into view
-  setTimeout(function(){detail.scrollIntoView({behavior:'smooth',block:'start'});},50);
 }
 
 function alarmCalPrev(){
