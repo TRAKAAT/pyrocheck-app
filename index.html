@@ -460,13 +460,8 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
 <div class="screen-content">
   <div class="screen-title">Edit Records</div>
   <div class="screen-sub">Correct or backfill check data</div>
-  <div style="margin:10px 0 6px;">
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button class="chip active" id="edit-filter-all" onclick="setEditFilter('all',this)">All</button>
-      <button class="chip" id="edit-filter-dupes" onclick="setEditFilter('dupes',this)">⚠ Duplicates</button>
-      <button class="chip" id="edit-filter-flags" onclick="setEditFilter('flags',this)">🚨 Flagged</button>
-    </div>
-    <div class="fu-row" style="margin-bottom:8px;"><label>Filter by date (optional)</label>
+  <div style="margin:10px 0;">
+    <div class="fu-row"><label>Filter by date</label>
       <input type="date" class="fu-input" id="edit-date-filter" oninput="renderEditList()">
     </div>
     <button class="btn-primary" style="margin-bottom:10px;" onclick="openAddBackfill()">+ Add Historical Check / Event</button>
@@ -626,6 +621,21 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
     <div class="operator-select-grid" id="op-grid"></div>
     <div class="fu-row"><label>Or type a name</label><input class="fu-input" id="op-manual" placeholder="Enter name manually"></div>
     <button class="btn-primary" onclick="confirmOperator()">Start →</button>
+  </div>
+</div>
+
+<!-- EDIT RECORD MODAL -->
+<div id="edit-rec-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:250;display:none;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--navy2);border-radius:20px 20px 0 0;width:100%;max-height:92dvh;overflow-y:auto;padding:20px 16px calc(var(--safe-bot)+20px);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:17px;font-weight:700;">Edit Record</div>
+      <button id="edit-rec-close" style="background:var(--surface);border:none;color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;">✕</button>
+    </div>
+    <div id="edit-rec-body"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button id="edit-rec-cancel" style="flex:1;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:600;color:var(--white);cursor:pointer;">Cancel</button>
+      <button id="edit-rec-save" style="flex:1;padding:13px;background:var(--pink);border:none;border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:700;color:#fff;cursor:pointer;">Save Changes</button>
+    </div>
   </div>
 </div>
 
@@ -1709,64 +1719,98 @@ async function generatePDF(type){
 function renderEditList(){
   const filterDate=document.getElementById('edit-date-filter')?.value;
   const db=getDB();let recs=db.records;
-  if(filterDate)recs=recs.filter(function(r){return new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate;});
-  const seen={};const dupeIds=new Set();
-  db.records.filter(function(r){return r.type==='check';}).forEach(function(r){
-    const dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    const key=dk+'|'+r.shift+'|'+r.checkSlot;
-    if(seen[key]){dupeIds.add(r.id);dupeIds.add(seen[key]);}else{seen[key]=r.id;}
-  });
-  const activeFilter=window._editFilter||'all';
-  if(activeFilter==='dupes')recs=recs.filter(function(r){return dupeIds.has(r.id);});
-  else if(activeFilter==='flags')recs=recs.filter(function(r){return r.flag==='alert'||r.flag==='warn';});
-  recs=recs.slice(0,200);
+  if(filterDate)recs=recs.filter(r=>new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate);
+  recs=recs.slice(0,100);
   const el=document.getElementById('edit-list');if(!el)return;
-  el.innerHTML='';
-  if(dupeIds.size>0&&activeFilter!=='dupes'){
-    const banner=document.createElement('div');
-    banner.style.cssText='background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius-xs);padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--amber);cursor:pointer;';
-    banner.innerHTML='⚠ <strong>'+dupeIds.size+' duplicate records detected</strong> — tap to view only duplicates';
-    banner.addEventListener('click',function(){setEditFilter('dupes',document.getElementById('edit-filter-dupes'));});
-    el.appendChild(banner);
-  }
-  if(!recs.length){
-    const empty=document.createElement('div');empty.className='log-empty';empty.style.cssText='padding:30px 20px;text-align:center;color:var(--muted);';
-    empty.textContent=activeFilter==='dupes'?'✅ No duplicates found':'📭 No records found';
-    el.appendChild(empty);return;
-  }
-  recs.forEach(function(r){
-    const isDupe=dupeIds.has(r.id);
-    const dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    const tm=(r.data&&r.data.inspection_time)?r.data.inspection_time:new Date(r.timestamp).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
-    const issues=(r.smokeFlag?'🔥 ':'')+(r.odourFlag?'👃 ':'')+(r.compFlag?'📣 ':'')+(r.evFlag?'⚙️ ':(r.flag==='ok'?'✅ Clear':''));
-    const entry=document.createElement('div');entry.className='edit-entry';
-    if(isDupe)entry.style.cssText='border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.04);';
-    else if(r.flag==='alert')entry.style.borderColor='rgba(239,68,68,0.4)';
-    const hdr=document.createElement('div');hdr.className='edit-entry-hdr';
-    const left=document.createElement('div');left.style.cssText='flex:1;min-width:0;';
-    const title=document.createElement('div');title.className='edit-entry-title';title.textContent=(r.checkLabel||r.type)+' · '+(r.operator||'—');
-    if(isDupe){const badge=document.createElement('span');badge.style.cssText='background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:5px;';badge.textContent='⚠ DUPE';title.appendChild(badge);}
-    const meta=document.createElement('div');meta.className='edit-entry-meta';meta.textContent=dk+' '+tm+' · '+(r.shift==='day'?'☀️':'🌙')+' '+(r.backfill?'[backfilled] ':'')+issues;
-    left.appendChild(title);left.appendChild(meta);
-    const btns=document.createElement('div');btns.style.cssText='display:flex;gap:4px;flex-shrink:0;';
-    const editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='Edit';
-    const delBtn=document.createElement('button');delBtn.className='del-btn';delBtn.textContent='Delete';
-    (function(id){editBtn.addEventListener('click',function(){editRecord(id);});delBtn.addEventListener('click',function(){confirmDelete(id);});})(r.id);
-    btns.appendChild(editBtn);btns.appendChild(delBtn);
-    hdr.appendChild(left);hdr.appendChild(btns);entry.appendChild(hdr);el.appendChild(entry);
-  });
-}
-function setEditFilter(f,el){
-  window._editFilter=f;
-  document.querySelectorAll('#edit-filter-all,#edit-filter-dupes,#edit-filter-flags').forEach(function(b){b.classList.remove('active');});
-  if(el)el.classList.add('active');
-  renderEditList();
+  if(!recs.length){el.innerHTML=`<div class="log-empty">No records found.<br><br>Use the date filter above or clear it to see all.</div>`;return;}
+  el.innerHTML=recs.map(r=>{
+    const fc=r.flag==='alert'?'pill-alert':r.flag==='warn'?'pill-warn':'pill-ok';
+    let issues=r.smokeFlag?'🔥 ':''+(r.odourFlag?'👃 ':''+(r.compFlag?'📣 ':''+(r.evFlag?'⚙️ ':'')));
+    return`<div class="edit-entry"><div class="edit-entry-hdr"><div><div class="edit-entry-title">${r.checkLabel} · ${r.operator||'—'}</div><div class="edit-entry-meta">${fmtDate(r.timestamp)} ${fmtTime(r.timestamp)} · ${r.shift==='day'?'☀️':'🌙'} ${r.backfill?'[backfilled]':''} ${issues}</div></div><div style="display:flex;gap:4px;"><button class="edit-btn" onclick="editRecord('${r.id}')">Edit</button><button class="del-btn" onclick="confirmDelete('${r.id}')">Delete</button></div></div><div class="pill ${fc}" style="display:inline-block;margin-top:4px;">${r.flag.toUpperCase()}</div></div>`;
+  }).join('');
 }
 function confirmDelete(id){if(confirm('Delete this record? This cannot be undone.'))deleteRecord(id);}
+let _editRecId=null;
 function editRecord(id){
-  const db=getDB(),rec=db.records.find(r=>r.id===id);if(!rec)return;
-  const note=prompt(`Edit notes for ${rec.checkLabel} (${fmtDate(rec.timestamp)}):\n\nCurrent notes: ${rec.data.gen_notes||'none'}\n\nEnter new general notes:`);
-  if(note!==null){updateRecord(id,{data:{...rec.data,gen_notes:note}});renderEditList();alert('Record updated.');}
+  const db=getDB(),rec=db.records.find(function(r){return r.id===id;});
+  if(!rec)return;
+  _editRecId=id;
+  const users=getUsers();
+  const inspTime=(rec.data&&rec.data.inspection_time)?rec.data.inspection_time.substring(0,5):'';
+  const inspDate=(rec.data&&rec.data.inspection_date)?rec.data.inspection_date:new Date(rec.timestamp).toLocaleDateString('en-CA');
+  const body=document.getElementById('edit-rec-body');
+  body.innerHTML='';
+  // Operator
+  const opRow=document.createElement('div');opRow.className='fu-row';
+  const opL=document.createElement('label');opL.textContent='Operator';opRow.appendChild(opL);
+  const opS=document.createElement('select');opS.className='fu-select';opS.id='er-op';
+  const opBlank=document.createElement('option');opBlank.value='';opBlank.textContent='— select —';opS.appendChild(opBlank);
+  users.forEach(function(u){const o=document.createElement('option');o.value=u.name;o.textContent=u.name;if(u.name===rec.operator)o.selected=true;opS.appendChild(o);});
+  const opManOpt=document.createElement('option');opManOpt.value='__manual__';opManOpt.textContent='Type manually...';opS.appendChild(opManOpt);
+  const opMI=document.createElement('input');opMI.className='fu-input';opMI.id='er-op-manual';opMI.placeholder='Type name';opMI.style.cssText='display:none;margin-top:6px;';
+  const hasManual=!users.find(function(u){return u.name===rec.operator;});
+  if(hasManual){opMI.style.display='block';opMI.value=rec.operator||'';}
+  opS.addEventListener('change',function(){opMI.style.display=this.value==='__manual__'?'block':'none';});
+  opRow.appendChild(opS);opRow.appendChild(opMI);body.appendChild(opRow);
+  // Check number
+  const slotRow=document.createElement('div');slotRow.className='fu-row';
+  const slotL=document.createElement('label');slotL.textContent='Check Number';slotRow.appendChild(slotL);
+  const slotD=document.createElement('div');slotD.style.cssText='display:flex;gap:8px;';
+  [0,1,2].forEach(function(i){const b=document.createElement('button');b.className='shift-pick-btn'+(rec.checkSlot===i?' active':'');b.style.flex='1';b.textContent='Check '+(i+1);b.addEventListener('click',function(){slotD.querySelectorAll('button').forEach(function(x){x.classList.remove('active');});b.classList.add('active');window._erSlot=i;});slotD.appendChild(b);});
+  slotRow.appendChild(slotD);body.appendChild(slotRow);
+  // Shift
+  const shiftRow=document.createElement('div');shiftRow.className='fu-row';
+  const shiftL=document.createElement('label');shiftL.textContent='Shift';shiftRow.appendChild(shiftL);
+  const shiftD=document.createElement('div');shiftD.style.cssText='display:flex;gap:8px;';
+  ['day','night'].forEach(function(s){const b=document.createElement('button');b.className='shift-pick-btn'+(rec.shift===s?' active':'');b.style.flex='1';b.textContent=s==='day'?'☀️ Day':'🌙 Night';b.addEventListener('click',function(){shiftD.querySelectorAll('button').forEach(function(x){x.classList.remove('active');});b.classList.add('active');window._erShift=s;});shiftD.appendChild(b);});
+  shiftRow.appendChild(shiftD);body.appendChild(shiftRow);
+  // Date & Time
+  const dtG=document.createElement('div');dtG.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;';
+  const dDiv=document.createElement('div');const dL=document.createElement('label');dL.style.cssText='display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;';dL.textContent='Date';dDiv.appendChild(dL);const dI=document.createElement('input');dI.className='fu-input';dI.type='date';dI.id='er-date';dI.value=inspDate;dDiv.appendChild(dI);
+  const tDiv=document.createElement('div');const tL=document.createElement('label');tL.style.cssText='display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;';tL.textContent='Time';tDiv.appendChild(tL);const tI=document.createElement('input');tI.className='fu-input';tI.type='time';tI.id='er-time';tI.value=inspTime;tDiv.appendChild(tI);
+  dtG.appendChild(dDiv);dtG.appendChild(tDiv);body.appendChild(dtG);
+  // Flags
+  const flagRow=document.createElement('div');flagRow.className='fu-row';
+  const flagL=document.createElement('label');flagL.textContent='Flags';flagRow.appendChild(flagL);
+  const flagD=document.createElement('div');flagD.style.cssText='display:flex;flex-wrap:wrap;gap:8px;';
+  [{id:'er-smoke',label:'🔥 Smoke',val:rec.smokeFlag},{id:'er-odour',label:'👃 Odour',val:rec.odourFlag},{id:'er-comp',label:'📣 Complaint',val:rec.compFlag},{id:'er-ev',label:'⚙️ Event',val:rec.evFlag}].forEach(function(f){const b=document.createElement('button');b.className='shift-pick-btn'+(f.val?' active':'');b.id=f.id;b.textContent=f.label;b.addEventListener('click',function(){b.classList.toggle('active');});flagD.appendChild(b);});
+  flagRow.appendChild(flagD);body.appendChild(flagRow);
+  // Notes
+  const notesRow=document.createElement('div');notesRow.className='fu-row';
+  const notesL=document.createElement('label');notesL.textContent='General Notes';notesRow.appendChild(notesL);
+  const notesTA=document.createElement('textarea');notesTA.className='fu-textarea';notesTA.id='er-notes';notesTA.value=(rec.data&&rec.data.gen_notes)?rec.data.gen_notes:'';notesRow.appendChild(notesTA);
+  body.appendChild(notesRow);
+  window._erSlot=rec.checkSlot>=0?rec.checkSlot:0;
+  window._erShift=rec.shift||'day';
+  const overlay=document.getElementById('edit-rec-overlay');
+  overlay.style.display='flex';
+  document.getElementById('edit-rec-close').onclick=function(){overlay.style.display='none';_editRecId=null;};
+  document.getElementById('edit-rec-cancel').onclick=function(){overlay.style.display='none';_editRecId=null;};
+  document.getElementById('edit-rec-save').onclick=saveEditRec;
+}
+function saveEditRec(){
+  if(!_editRecId)return;
+  const db=getDB(),rec=db.records.find(function(r){return r.id===_editRecId;});if(!rec)return;
+  const opSel=document.getElementById('er-op').value;
+  const op=opSel==='__manual__'?document.getElementById('er-op-manual').value.trim():(opSel||rec.operator);
+  const date=document.getElementById('er-date').value||new Date(rec.timestamp).toLocaleDateString('en-CA');
+  const time=document.getElementById('er-time').value;
+  const slot=typeof window._erSlot==='number'?window._erSlot:rec.checkSlot;
+  const shift=window._erShift||rec.shift;
+  const notes=document.getElementById('er-notes').value.trim();
+  const smoke=document.getElementById('er-smoke').classList.contains('active');
+  const odour=document.getElementById('er-odour').classList.contains('active');
+  const comp=document.getElementById('er-comp').classList.contains('active');
+  const ev=document.getElementById('er-ev').classList.contains('active');
+  const flag=smoke||odour||comp||ev?'alert':'ok';
+  let ts=rec.timestamp;
+  if(date&&time){var tp=time.split(':');ts=new Date(date+'T'+String(tp[0]).padStart(2,'0')+':'+String(tp[1]).padStart(2,'0')+':00').toISOString();}
+  else if(date){ts=new Date(date+'T12:00:00').toISOString();}
+  updateRecord(_editRecId,{operator:op,shift:shift,checkSlot:slot,checkLabel:'Check '+(slot+1),flag:flag,smokeFlag:smoke,odourFlag:odour,compFlag:comp,evFlag:ev,timestamp:ts,data:Object.assign({},rec.data,{inspection_time:time,inspection_date:date,gen_notes:notes})});
+  document.getElementById('edit-rec-overlay').style.display='none';
+  _editRecId=null;
+  renderEditList();
+}
 }
 function openAddBackfill(){
   const users=getUsers();
@@ -1892,7 +1936,6 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   if(id==='screen-alarms')setTimeout(renderAlarms,50);
-  if(id==='screen-edit')setTimeout(renderEditList,50);
   document.getElementById(id).classList.add('active');
   const map={'screen-home':0,'screen-log':1,'screen-report':2,'screen-edit':3,'screen-settings':4};
   const idx=map[id];if(idx!==undefined)document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
