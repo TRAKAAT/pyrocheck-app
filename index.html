@@ -1678,39 +1678,80 @@ function renderEditList(){
 function confirmDelete(id){if(confirm('Delete this record? This cannot be undone.'))deleteRecord(id);}
 let _editRecId=null;
 function editRecord(id){
-  const db=getDB(),rec=db.records.find(function(r){return r.id===id;});if(!rec)return;
+  const db=getDB(),rec=db.records.find(function(r){return r.id===id;});
+  if(!rec)return;
   _editRecId=id;
   const users=getUsers();
-  const inspTime=(rec.data&&rec.data.inspection_time?rec.data.inspection_time.substring(0,5):'');
-  const inspDate=(rec.data&&rec.data.inspection_date?rec.data.inspection_date:new Date(rec.timestamp).toLocaleDateString('en-CA'));
-  const userOpts=users.map(function(u){return '<option value="'+u.name+'"'+(u.name===rec.operator?' selected':'')+'>'+u.name+'</option>';}).join('');
+  const inspTime=(rec.data&&rec.data.inspection_time)?rec.data.inspection_time.substring(0,5):'';
+  const inspDate=(rec.data&&rec.data.inspection_date)?rec.data.inspection_date:new Date(rec.timestamp).toLocaleDateString('en-CA');
+  const body=document.getElementById('edit-rec-body');
+  body.innerHTML='';
+
+  // Operator row
+  const opRow=document.createElement('div');opRow.className='fu-row';
+  const opLabel=document.createElement('label');opLabel.textContent='Operator';opRow.appendChild(opLabel);
+  const opSel=document.createElement('select');opSel.className='fu-select';opSel.id='er-op';
+  const opBlank=document.createElement('option');opBlank.value='';opBlank.textContent='— select —';opSel.appendChild(opBlank);
+  users.forEach(function(u){const o=document.createElement('option');o.value=u.name;o.textContent=u.name;if(u.name===rec.operator)o.selected=true;opSel.appendChild(o);});
+  const opManualOpt=document.createElement('option');opManualOpt.value='__manual__';opManualOpt.textContent='Type manually...';opSel.appendChild(opManualOpt);
+  opRow.appendChild(opSel);
+  const opManual=document.createElement('input');opManual.className='fu-input';opManual.id='er-op-manual';opManual.placeholder='Type name';opManual.style.cssText='display:none;margin-top:6px;';
   const hasManual=!users.find(function(u){return u.name===rec.operator;});
-  document.getElementById('edit-rec-body').innerHTML=
-    '<div class="fu-row"><label>Operator</label>'
-    +'<select class="fu-select" id="er-op" onchange="document.getElementById('er-op-manual').style.display=this.value==='__manual__'?'block':'none';">'
-    +'<option value="">— select —</option>'+userOpts+'<option value="__manual__">Type manually...</option>'
-    +'</select>'
-    +'<input class="fu-input" id="er-op-manual" placeholder="Type name" style="display:'+(hasManual?'block':'none')+';margin-top:6px;" value="'+(hasManual?rec.operator||'':'')+'"></div>'
-    +'<div class="fu-row"><label>Check Number</label><div style="display:flex;gap:8px;">'
-    +'<button class="shift-pick-btn '+(rec.checkSlot===0?'active':'')+'" id="er-s0" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=0;">Check 1</button>'
-    +'<button class="shift-pick-btn '+(rec.checkSlot===1?'active':'')+'" id="er-s1" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=1;">Check 2</button>'
-    +'<button class="shift-pick-btn '+(rec.checkSlot===2?'active':'')+'" id="er-s2" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=2;">Check 3</button>'
-    +'</div></div>'
-    +'<div class="fu-row"><label>Shift</label><div style="display:flex;gap:8px;">'
-    +'<button class="shift-pick-btn '+(rec.shift==='day'?'active':'')+'" id="er-day" onclick="document.getElementById('er-day').classList.add('active');document.getElementById('er-night').classList.remove('active');window._erShift='day';">☀️ Day</button>'
-    +'<button class="shift-pick-btn '+(rec.shift==='night'?'active':'')+'" id="er-night" onclick="document.getElementById('er-night').classList.add('active');document.getElementById('er-day').classList.remove('active');window._erShift='night';">🌙 Night</button>'
-    +'</div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
-    +'<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;">Date</label><input class="fu-input" type="date" id="er-date" value="'+inspDate+'"></div>'
-    +'<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;">Time</label><input class="fu-input" type="time" id="er-time" value="'+inspTime+'"></div>'
-    +'</div>'
-    +'<div class="fu-row"><label>Flags</label><div style="display:flex;flex-wrap:wrap;gap:8px;">'
-    +'<button class="shift-pick-btn '+(rec.smokeFlag?'active':'')+'" id="er-smoke" onclick="this.classList.toggle('active');">🔥 Smoke</button>'
-    +'<button class="shift-pick-btn '+(rec.odourFlag?'active':'')+'" id="er-odour" onclick="this.classList.toggle('active');">👃 Odour</button>'
-    +'<button class="shift-pick-btn '+(rec.compFlag?'active':'')+'" id="er-comp" onclick="this.classList.toggle('active');">📣 Complaint</button>'
-    +'<button class="shift-pick-btn '+(rec.evFlag?'active':'')+'" id="er-ev" onclick="this.classList.toggle('active');">⚙️ Event</button>'
-    +'</div></div>'
-    +'<div class="fu-row"><label>General Notes</label><textarea class="fu-textarea" id="er-notes">'+(rec.data&&rec.data.gen_notes?rec.data.gen_notes:'')+'</textarea></div>';
+  if(hasManual){opManual.style.display='block';opManual.value=rec.operator||'';}
+  opSel.addEventListener('change',function(){opManual.style.display=this.value==='__manual__'?'block':'none';});
+  opRow.appendChild(opManual);body.appendChild(opRow);
+
+  // Check number row
+  const slotRow=document.createElement('div');slotRow.className='fu-row';
+  const slotLabel=document.createElement('label');slotLabel.textContent='Check Number';slotRow.appendChild(slotLabel);
+  const slotBtns=document.createElement('div');slotBtns.style.cssText='display:flex;gap:8px;';
+  [0,1,2].forEach(function(i){
+    const btn=document.createElement('button');btn.className='shift-pick-btn'+(rec.checkSlot===i?' active':'');
+    btn.textContent='Check '+(i+1);
+    btn.addEventListener('click',function(){slotBtns.querySelectorAll('.shift-pick-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');window._erSlot=i;});
+    slotBtns.appendChild(btn);
+  });
+  slotRow.appendChild(slotBtns);body.appendChild(slotRow);
+
+  // Shift row
+  const shiftRow=document.createElement('div');shiftRow.className='fu-row';
+  const shiftLabel=document.createElement('label');shiftLabel.textContent='Shift';shiftRow.appendChild(shiftLabel);
+  const shiftBtns=document.createElement('div');shiftBtns.style.cssText='display:flex;gap:8px;';
+  ['day','night'].forEach(function(s){
+    const btn=document.createElement('button');btn.className='shift-pick-btn'+(rec.shift===s?' active':'');
+    btn.textContent=s==='day'?'☀️ Day':'🌙 Night';
+    btn.addEventListener('click',function(){shiftBtns.querySelectorAll('.shift-pick-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');window._erShift=s;});
+    shiftBtns.appendChild(btn);
+  });
+  shiftRow.appendChild(shiftBtns);body.appendChild(shiftRow);
+
+  // Date & Time row
+  const dtGrid=document.createElement('div');dtGrid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;';
+  const dateDiv=document.createElement('div');
+  const dateLabel=document.createElement('label');dateLabel.style.cssText='display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;';dateLabel.textContent='Date';dateDiv.appendChild(dateLabel);
+  const dateInput=document.createElement('input');dateInput.className='fu-input';dateInput.type='date';dateInput.id='er-date';dateInput.value=inspDate;dateDiv.appendChild(dateInput);
+  const timeDiv=document.createElement('div');
+  const timeLabel=document.createElement('label');timeLabel.style.cssText='display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;';timeLabel.textContent='Time';timeDiv.appendChild(timeLabel);
+  const timeInput=document.createElement('input');timeInput.className='fu-input';timeInput.type='time';timeInput.id='er-time';timeInput.value=inspTime;timeDiv.appendChild(timeInput);
+  dtGrid.appendChild(dateDiv);dtGrid.appendChild(timeDiv);body.appendChild(dtGrid);
+
+  // Flags row
+  const flagRow=document.createElement('div');flagRow.className='fu-row';
+  const flagLabel=document.createElement('label');flagLabel.textContent='Flags';flagRow.appendChild(flagLabel);
+  const flagBtns=document.createElement('div');flagBtns.style.cssText='display:flex;flex-wrap:wrap;gap:8px;';
+  [{id:'er-smoke',label:'🔥 Smoke',val:rec.smokeFlag},{id:'er-odour',label:'👃 Odour',val:rec.odourFlag},{id:'er-comp',label:'📣 Complaint',val:rec.compFlag},{id:'er-ev',label:'⚙️ Event',val:rec.evFlag}].forEach(function(f){
+    const btn=document.createElement('button');btn.className='shift-pick-btn'+(f.val?' active':'');btn.id=f.id;btn.textContent=f.label;
+    btn.addEventListener('click',function(){btn.classList.toggle('active');});
+    flagBtns.appendChild(btn);
+  });
+  flagRow.appendChild(flagBtns);body.appendChild(flagRow);
+
+  // Notes row
+  const notesRow=document.createElement('div');notesRow.className='fu-row';
+  const notesLabel=document.createElement('label');notesLabel.textContent='General Notes';notesRow.appendChild(notesLabel);
+  const notesTA=document.createElement('textarea');notesTA.className='fu-textarea';notesTA.id='er-notes';notesTA.value=(rec.data&&rec.data.gen_notes)?rec.data.gen_notes:'';notesRow.appendChild(notesTA);
+  body.appendChild(notesRow);
+
   window._erSlot=rec.checkSlot>=0?rec.checkSlot:0;
   window._erShift=rec.shift||'day';
   document.getElementById('edit-rec-overlay').style.display='flex';
