@@ -1079,7 +1079,8 @@ let alarmCalSelected=null;
 const ALARM_CAL_DAYS=['Su','Mo','Tu','We','Th','Fr','Sa'];
 const ALARM_CAL_MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function alarmDateKey(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');}
-function todayKey(){const n=new Date();return alarmDateKey(n.getFullYear(),n.getMonth(),n.getDate());}
+function dateToKey(dateObj){return alarmDateKey(dateObj.getFullYear(),dateObj.getMonth(),dateObj.getDate());}
+function todayKey(){return dateToKey(new Date());}
 
 function alarmDebug(){
   const el=document.getElementById('alarm-debug-out');
@@ -1107,6 +1108,7 @@ function getMissedDaysMap(){
   const todayStr=todayKey();
   const done={};
   const activeDays={};
+  // Collect ALL check records regardless of checkSlot value
   db.records.filter(r=>r.type==='check').forEach(r=>{
     const t=new Date(r.timestamp);
     const dk=(r.data&&r.data.inspection_date&&String(r.data.inspection_date).trim().length>=8)
@@ -1115,21 +1117,14 @@ function getMissedDaysMap(){
     if(dk>=todayStr) return;
     const sh=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
     activeDays[dk]=true;
-    if(typeof r.checkSlot==='number'&&r.checkSlot>=0&&r.checkSlot<=2){
-      // Valid slot number — mark just that slot done
+    // Only mark slot done if checkSlot is valid (0,1,2)
+    if(r.checkSlot>=0&&r.checkSlot<=2){
       done[dk+'|'+sh+'|'+r.checkSlot]=true;
-    } else {
-      // slot=-1 means record exists but slot unknown — treat entire shift as complete
-      done[dk+'|'+sh+'|0']=true;
-      done[dk+'|'+sh+'|1']=true;
-      done[dk+'|'+sh+'|2']=true;
     }
   });
   const missedMap={};
   Object.keys(activeDays).forEach(dk=>{
     ['day','night'].forEach(sh=>{
-      // Only check this shift if at least one record exists for it
-      if(!done[dk+'|'+sh+'|0']&&!done[dk+'|'+sh+'|1']&&!done[dk+'|'+sh+'|2']) return;
       const slots=[{slot:0,time:sh==='day'?'07:00':'19:00'},{slot:1,time:sh==='day'?'11:00':'23:00'},{slot:2,time:sh==='day'?'15:00':'03:00'}];
       const missed=slots.filter(c=>!done[dk+'|'+sh+'|'+c.slot]);
       if(missed.length>0){
@@ -2024,7 +2019,7 @@ async function doSyncAll() {
 }
 async function doPullUsers() {
   await syncUsersFromServer();
-  loadSettingsUI();
+  renderSettings();
   alert('Operators pulled from server.');
 }
 async function doPushUsers() {
