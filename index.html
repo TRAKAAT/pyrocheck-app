@@ -1709,50 +1709,52 @@ async function generatePDF(type){
 function renderEditList(){
   const filterDate=document.getElementById('edit-date-filter')?.value;
   const db=getDB();let recs=db.records;
-  if(filterDate) recs=recs.filter(r=>new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate);
-  // Find all duplicates first (same date+shift+slot)
+  if(filterDate)recs=recs.filter(function(r){return new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate;});
   const seen={};const dupeIds=new Set();
-  db.records.filter(r=>r.type==='check').forEach(r=>{
+  db.records.filter(function(r){return r.type==='check';}).forEach(function(r){
     const dk=new Date(r.timestamp).toLocaleDateString('en-CA');
     const key=dk+'|'+r.shift+'|'+r.checkSlot;
-    if(seen[key])dupeIds.add(r.id),dupeIds.add(seen[key]);
-    else seen[key]=r.id;
+    if(seen[key]){dupeIds.add(r.id);dupeIds.add(seen[key]);}else{seen[key]=r.id;}
   });
-  // Apply active filter
   const activeFilter=window._editFilter||'all';
-  if(activeFilter==='dupes') recs=recs.filter(r=>dupeIds.has(r.id));
-  else if(activeFilter==='flags') recs=recs.filter(r=>r.flag==='alert'||r.flag==='warn');
+  if(activeFilter==='dupes')recs=recs.filter(function(r){return dupeIds.has(r.id);});
+  else if(activeFilter==='flags')recs=recs.filter(function(r){return r.flag==='alert'||r.flag==='warn';});
   recs=recs.slice(0,200);
   const el=document.getElementById('edit-list');if(!el)return;
-  if(!recs.length){
-    el.innerHTML='<div class="log-empty" style="padding:30px 20px;text-align:center;color:var(--muted);">'+(activeFilter==='dupes'?'✅ No duplicates found':'📭 No records found')+'</div>';
-    return;
-  }
-  // Summary banner
-  let banner='';
+  el.innerHTML='';
   if(dupeIds.size>0&&activeFilter!=='dupes'){
-    banner='<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius-xs);padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--amber);cursor:pointer;" onclick="setEditFilter('dupes',document.getElementById('edit-filter-dupes'))">⚠ <strong>'+dupeIds.size+' duplicate records detected</strong> — tap to view only duplicates</div>';
+    const banner=document.createElement('div');
+    banner.style.cssText='background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius-xs);padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--amber);cursor:pointer;';
+    banner.innerHTML='⚠ <strong>'+dupeIds.size+' duplicate records detected</strong> — tap to view only duplicates';
+    banner.addEventListener('click',function(){setEditFilter('dupes',document.getElementById('edit-filter-dupes'));});
+    el.appendChild(banner);
   }
-  el.innerHTML=banner+recs.map(r=>{
+  if(!recs.length){
+    const empty=document.createElement('div');empty.className='log-empty';empty.style.cssText='padding:30px 20px;text-align:center;color:var(--muted);';
+    empty.textContent=activeFilter==='dupes'?'✅ No duplicates found':'📭 No records found';
+    el.appendChild(empty);return;
+  }
+  recs.forEach(function(r){
     const isDupe=dupeIds.has(r.id);
     const dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    const tm=r.data&&r.data.inspection_time?r.data.inspection_time:new Date(r.timestamp).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
+    const tm=(r.data&&r.data.inspection_time)?r.data.inspection_time:new Date(r.timestamp).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'});
     const issues=(r.smokeFlag?'🔥 ':'')+(r.odourFlag?'👃 ':'')+(r.compFlag?'📣 ':'')+(r.evFlag?'⚙️ ':(r.flag==='ok'?'✅ Clear':''));
-    const dupeBadge=isDupe?'<span style="background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:5px;">⚠ DUPE</span>':'';
-    const borderStyle=isDupe?'border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.04);':r.flag==='alert'?'border-color:rgba(239,68,68,0.4);':'';
-    return '<div class="edit-entry" style="'+borderStyle+'">'
-      +'<div class="edit-entry-hdr">'
-        +'<div style="flex:1;min-width:0;">'
-          +'<div class="edit-entry-title">'+(r.checkLabel||r.type)+' · '+(r.operator||'—')+dupeBadge+'</div>'
-          +'<div class="edit-entry-meta">'+dk+' '+tm+' · '+(r.shift==='day'?'☀️':'🌙')+' '+(r.backfill?'[backfilled] ':'')+issues+'</div>'
-        +'</div>'
-        +'<div style="display:flex;gap:4px;flex-shrink:0;">'
-          +'<button class="edit-btn" onclick="editRecord(''+r.id+'')">Edit</button>'
-          +'<button class="del-btn" onclick="confirmDelete(''+r.id+'')">Delete</button>'
-        +'</div>'
-      +'</div>'
-    +'</div>';
-  }).join('');
+    const entry=document.createElement('div');entry.className='edit-entry';
+    if(isDupe)entry.style.cssText='border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.04);';
+    else if(r.flag==='alert')entry.style.borderColor='rgba(239,68,68,0.4)';
+    const hdr=document.createElement('div');hdr.className='edit-entry-hdr';
+    const left=document.createElement('div');left.style.cssText='flex:1;min-width:0;';
+    const title=document.createElement('div');title.className='edit-entry-title';title.textContent=(r.checkLabel||r.type)+' · '+(r.operator||'—');
+    if(isDupe){const badge=document.createElement('span');badge.style.cssText='background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:5px;';badge.textContent='⚠ DUPE';title.appendChild(badge);}
+    const meta=document.createElement('div');meta.className='edit-entry-meta';meta.textContent=dk+' '+tm+' · '+(r.shift==='day'?'☀️':'🌙')+' '+(r.backfill?'[backfilled] ':'')+issues;
+    left.appendChild(title);left.appendChild(meta);
+    const btns=document.createElement('div');btns.style.cssText='display:flex;gap:4px;flex-shrink:0;';
+    const editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='Edit';
+    const delBtn=document.createElement('button');delBtn.className='del-btn';delBtn.textContent='Delete';
+    (function(id){editBtn.addEventListener('click',function(){editRecord(id);});delBtn.addEventListener('click',function(){confirmDelete(id);});})(r.id);
+    btns.appendChild(editBtn);btns.appendChild(delBtn);
+    hdr.appendChild(left);hdr.appendChild(btns);entry.appendChild(hdr);el.appendChild(entry);
+  });
 }
 function setEditFilter(f,el){
   window._editFilter=f;
