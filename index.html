@@ -624,6 +624,21 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
   </div>
 </div>
 
+<!-- EDIT RECORD MODAL -->
+<div id="edit-record-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:250;display:none;align-items:flex-end;justify-content:center;">
+  <div style="background:var(--navy2);border-radius:20px 20px 0 0;width:100%;max-height:92dvh;overflow-y:auto;padding:20px 16px calc(var(--safe-bot)+20px);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:17px;font-weight:700;" id="edit-rec-title">Edit Record</div>
+      <button onclick="closeEditRecord()" style="background:var(--surface);border:none;color:var(--muted);border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="edit-rec-body"></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button onclick="closeEditRecord()" style="flex:1;padding:13px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:600;color:var(--white);cursor:pointer;">Cancel</button>
+      <button onclick="saveEditRecord()" style="flex:1;padding:13px;background:var(--pink);border:none;border-radius:var(--radius-xs);font-family:var(--font);font-size:15px;font-weight:700;color:#fff;cursor:pointer;">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- SYNC PANEL MODAL -->
 <div id="sync-panel" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:none;align-items:flex-end;justify-content:center;">
   <div class="modal" style="max-height:80dvh;overflow-y:auto;">
@@ -1705,48 +1720,71 @@ function renderEditList(){
   const filterDate=document.getElementById('edit-date-filter')?.value;
   const db=getDB();let recs=db.records;
   if(filterDate)recs=recs.filter(r=>new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate);
-  recs=recs.slice(0,200);
+  recs=recs.slice(0,100);
   const el=document.getElementById('edit-list');if(!el)return;
-  if(!recs.length){el.innerHTML='<div class="log-empty">No records found.<br><br>Use the date filter above or clear it to see all.</div>';return;}
-  // Find duplicates: same date + shift + checkSlot
-  const seen={};const dupeIds=new Set();
-  recs.forEach(r=>{
-    if(r.type!=='check') return;
-    const dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    const key=dk+'|'+r.shift+'|'+r.checkSlot;
-    if(seen[key]) dupeIds.add(r.id),dupeIds.add(seen[key]);
-    else seen[key]=r.id;
-  });
+  if(!recs.length){el.innerHTML=`<div class="log-empty">No records found.<br><br>Use the date filter above or clear it to see all.</div>`;return;}
   el.innerHTML=recs.map(r=>{
-    const isDupe=dupeIds.has(r.id);
     const fc=r.flag==='alert'?'pill-alert':r.flag==='warn'?'pill-warn':'pill-ok';
-    let issues=(r.smokeFlag?'🔥 ':'')+(r.odourFlag?'👃 ':'')+(r.compFlag?'📣 ':'')+(r.evFlag?'⚙️ ':'');
-    if(!issues&&r.flag==='ok') issues='✅ Clear';
-    const dupeBadge=isDupe?'<span style="background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:6px;">⚠ DUPLICATE</span>':'';
-    const dupeStyle=isDupe?'border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.06);':'';
-    return '<div class="edit-entry" style="'+dupeStyle+'">'
-      +'<div class="edit-entry-hdr">'
-        +'<div style="flex:1;min-width:0;">'
-          +'<div class="edit-entry-title">'+r.checkLabel+' · '+(r.operator||'—')+dupeBadge+'</div>'
-          +'<div class="edit-entry-meta">'+fmtDate(r.timestamp)+' '+fmtTime(r.timestamp)+' · '+(r.shift==='day'?'☀️ Day':'🌙 Night')+(r.backfill?' [backfilled]':'')+' · '+issues+'</div>'
-        +'</div>'
-        +'<div style="display:flex;gap:4px;flex-shrink:0;">'
-          +'<button class="edit-btn" onclick="editRecord(''+r.id+'')">Edit</button>'
-          +'<button class="del-btn" onclick="confirmDelete(''+r.id+'')">Delete</button>'
-        +'</div>'
-      +'</div>'
-    +'</div>';
+    let issues=r.smokeFlag?'🔥 ':''+(r.odourFlag?'👃 ':''+(r.compFlag?'📣 ':''+(r.evFlag?'⚙️ ':'')));
+    return`<div class="edit-entry"><div class="edit-entry-hdr"><div><div class="edit-entry-title">${r.checkLabel} · ${r.operator||'—'}</div><div class="edit-entry-meta">${fmtDate(r.timestamp)} ${fmtTime(r.timestamp)} · ${r.shift==='day'?'☀️':'🌙'} ${r.backfill?'[backfilled]':''} ${issues}</div></div><div style="display:flex;gap:4px;"><button class="edit-btn" onclick="editRecord('${r.id}')">Edit</button><button class="del-btn" onclick="confirmDelete('${r.id}')">Delete</button></div></div><div class="pill ${fc}" style="display:inline-block;margin-top:4px;">${r.flag.toUpperCase()}</div></div>`;
   }).join('');
-  // Show dupe summary
-  if(dupeIds.size>0){
-    el.insertAdjacentHTML('afterbegin','<div style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius-xs);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--amber);">⚠ <strong>'+dupeIds.size+' duplicate records found</strong> — highlighted in amber. Delete the extras to clean up.</div>');
-  }
 }
 function confirmDelete(id){if(confirm('Delete this record? This cannot be undone.'))deleteRecord(id);}
+
+let _editRecId=null;
 function editRecord(id){
   const db=getDB(),rec=db.records.find(r=>r.id===id);if(!rec)return;
-  const note=prompt(`Edit notes for ${rec.checkLabel} (${fmtDate(rec.timestamp)}):\n\nCurrent notes: ${rec.data.gen_notes||'none'}\n\nEnter new general notes:`);
-  if(note!==null){updateRecord(id,{data:{...rec.data,gen_notes:note}});renderEditList();alert('Record updated.');}
+  _editRecId=id;
+  const t=new Date(rec.timestamp);
+  const dk=t.toLocaleDateString('en-CA');
+  const tm=fmtTime(rec.timestamp);
+  document.getElementById('edit-rec-title').textContent=(rec.checkLabel||'Record')+' — '+fmtDate(rec.timestamp);
+  const flagColor=rec.flag==='alert'?'var(--red)':rec.flag==='warn'?'var(--amber)':'var(--green)';
+  const issues=[];
+  if(rec.smokeFlag)issues.push('🔥 Smoke');
+  if(rec.odourFlag)issues.push('👃 Odour');
+  if(rec.compFlag)issues.push('📣 Complaint');
+  if(rec.evFlag)issues.push('⚙️ Event');
+  if(!issues.length)issues.push('✅ All clear');
+
+  document.getElementById('edit-rec-body').innerHTML=
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-xs);padding:12px 14px;margin-bottom:14px;">'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Check</div><div style="font-size:14px;font-weight:700;">'+(rec.checkLabel||'—')+'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Operator</div><div style="font-size:14px;font-weight:700;">'+(rec.operator||'—')+'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Date</div><div style="font-size:14px;font-weight:700;">'+fmtDate(rec.timestamp)+'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Time</div><div style="font-size:14px;font-weight:700;">'+(rec.data&&rec.data.inspection_time?rec.data.inspection_time:tm)+'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Shift</div><div style="font-size:14px;font-weight:700;">'+(rec.shift==='day'?'☀️ Day':'🌙 Night')+'</div></div>'
+        +'<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:3px;">Status</div><div style="font-size:14px;font-weight:700;color:'+flagColor+';">'+(rec.flag||'ok').toUpperCase()+'</div></div>'
+      +'</div>'
+      +'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);">'
+        +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:5px;">Flags</div>'
+        +'<div style="font-size:13px;">'+issues.join(' · ')+'</div>'
+      +'</div>'
+      +(rec.data&&rec.data.gen_notes?'<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border2);"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:700;margin-bottom:5px;">Notes</div><div style="font-size:13px;">'+rec.data.gen_notes+'</div></div>':'')
+    +'</div>'
+    +'<div class="fu-row"><label>Operator</label><input class="fu-input" id="edit-op" value="'+(rec.operator||'')+'"></div>'
+    +'<div class="fu-row"><label>Inspection Time</label><input class="fu-input" id="edit-time" type="time" value="'+(rec.data&&rec.data.inspection_time?rec.data.inspection_time.substring(0,5):'')+'"></div>'
+    +'<div class="fu-row"><label>General Notes</label><textarea class="fu-textarea" id="edit-notes">'+(rec.data&&rec.data.gen_notes?rec.data.gen_notes:'')+'</textarea></div>';
+
+  document.getElementById('edit-record-overlay').style.display='flex';
+}
+function closeEditRecord(){
+  document.getElementById('edit-record-overlay').style.display='none';
+  _editRecId=null;
+}
+function saveEditRecord(){
+  if(!_editRecId)return;
+  const db=getDB(),rec=db.records.find(r=>r.id===_editRecId);if(!rec)return;
+  const op=document.getElementById('edit-op').value.trim();
+  const time=document.getElementById('edit-time').value;
+  const notes=document.getElementById('edit-notes').value.trim();
+  updateRecord(_editRecId,{
+    operator:op||rec.operator,
+    data:{...rec.data,inspection_time:time||rec.data.inspection_time,gen_notes:notes}
+  });
+  closeEditRecord();
+  renderEditList();
 }
 function openAddBackfill(){
   const users=getUsers();
