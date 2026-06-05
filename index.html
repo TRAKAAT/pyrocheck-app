@@ -1084,31 +1084,40 @@ function todayKey(){const n=new Date();return alarmDateKey(n.getFullYear(),n.get
 // Get all days that have missed checks from DB
 function getMissedDaysMap(){
   const db=getDB();
-  const map={};
   const now=new Date();
   const todayStr=todayKey();
+  // Build a set of completed check keys: "YYYY-MM-DD|shift|slot"
+  const done=new Set();
   db.records.filter(r=>r.type==='check').forEach(r=>{
+    let dk;
+    if(r.data&&r.data.inspection_date&&r.data.inspection_date.trim()){
+      dk=r.data.inspection_date.trim().substring(0,10);
+    } else {
+      dk=new Date(r.timestamp).toLocaleDateString('en-CA');
+    }
     const t=new Date(r.timestamp);
-    const dk=t.toLocaleDateString('en-CA');
-    if(dk>=todayStr) return; // skip today and future (shown on home)
-    if(!map[dk]) map[dk]={day:[],night:[]};
-    const shift=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
-    map[dk][shift].push(r);
+    const sh=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
+    const slot=typeof r.checkSlot==='number'&&r.checkSlot>=0?r.checkSlot:0;
+    done.add(dk+'|'+sh+'|'+slot);
   });
-  // Now find which dates have MISSED slots (i.e. not all 3 check slots done)
+  // Scan every day from the start of the current month back 90 days
   const missedMap={};
-  Object.keys(map).forEach(dk=>{
-    ['day','night'].forEach(sh=>{
-      const recs=map[dk][sh];
-      const doneSlots=new Set(recs.map(r=>r.checkSlot));
-      const checkHours=sh==='day'?[7,11,15]:[19,23,3];
-      const missed=checkHours.filter((_,i)=>!doneSlots.has(i));
+  for(let i=1;i<=90;i++){
+    const d=new Date(now);
+    d.setDate(d.getDate()-i);
+    const dk=d.toLocaleDateString('en-CA');
+    if(dk>=todayStr) continue;
+    ['day','night'].forEach(function(sh){
+      const slots=sh==='day'
+        ?[{slot:0,time:'07:00'},{slot:1,time:'11:00'},{slot:2,time:'15:00'}]
+        :[{slot:0,time:'19:00'},{slot:1,time:'23:00'},{slot:2,time:'03:00'}];
+      const missed=slots.filter(function(c){return !done.has(dk+'|'+sh+'|'+c.slot);});
       if(missed.length>0){
-        if(!missedMap[dk]) missedMap[dk]={};
-        missedMap[dk][sh]=missed.map((h,i)=>({slot:checkHours.indexOf(h),time:(h<10?'0':'')+h+':00'}));
+        if(!missedMap[dk])missedMap[dk]={};
+        missedMap[dk][sh]=missed;
       }
     });
-  });
+  }
   return missedMap;
 }
 
@@ -1157,11 +1166,14 @@ function renderAlarmCalendar(){
     else if(isFuture){bg='transparent';border='1px solid transparent';color='rgba(255,255,255,0.15)';}
     else{bg='var(--surface)';border='1px solid var(--border2)';color='var(--muted)';}
 
-    const onclick=isMissed?`onclick="alarmCalSelectDate('${dk}',${d})"`:isToday?`onclick="alarmCalSelectDate('${dk}',${d})"` :'';
-    cells+=`<div ${onclick} style="aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;background:${bg};border:${border};color:${color};cursor:${cursor};position:relative;transition:all .15s;">
-      ${d}
-      ${isMissed&&!isSelected?`<div style="width:4px;height:4px;background:var(--red);border-radius:50%;position:absolute;bottom:3px;left:50%;transform:translateX(-50%);"></div>`:''}
-    </div>`;
+    const clickable=isMissed||(!isFuture&&!isToday);
+    let cellHtml='<div ';
+    if(clickable) cellHtml+='onclick="alarmCalSelectDate(\''+dk+'\','+d+')" ';
+    cellHtml+='style="aspect-ratio:1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;background:'+bg+';border:'+border+';color:'+color+';cursor:'+cursor+';position:relative;transition:all .15s;">';
+    cellHtml+=d;
+    if(isMissed&&!isSelected) cellHtml+='<div style="width:4px;height:4px;background:var(--red);border-radius:50%;position:absolute;bottom:3px;left:50%;transform:translateX(-50%);"></div>';
+    cellHtml+='</div>';
+    cells+=cellHtml;
   }
   gridEl.innerHTML=cells;
 }
