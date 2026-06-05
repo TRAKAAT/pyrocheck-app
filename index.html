@@ -1124,9 +1124,6 @@ function getMissedDaysMap(){
   const missedMap={};
   Object.keys(activeDays).forEach(dk=>{
     ['day','night'].forEach(sh=>{
-      // Only flag this shift if at least one check was recorded for it
-      const shiftHasAnyRecord=done[dk+'|'+sh+'|0']||done[dk+'|'+sh+'|1']||done[dk+'|'+sh+'|2'];
-      if(!shiftHasAnyRecord) return;
       const slots=[{slot:0,time:sh==='day'?'07:00':'19:00'},{slot:1,time:sh==='day'?'11:00':'23:00'},{slot:2,time:sh==='day'?'15:00':'03:00'}];
       const missed=slots.filter(c=>!done[dk+'|'+sh+'|'+c.slot]);
       if(missed.length>0){
@@ -1191,25 +1188,10 @@ function renderAlarmCalendar(){
 
 function alarmCalSelectDate(dk,dayNum){
   alarmCalSelected=dk;
-  // Update cell styles in-place — do NOT call renderAlarmCalendar() as it wipes the grid+listener
-  const missedMap=getMissedDaysMap();
-  const today=todayKey();
-  const gridEl=document.getElementById('alarm-cal-grid');
-  if(gridEl){
-    Array.from(gridEl.children).forEach(function(cell){
-      const cellDk=cell.getAttribute('data-caldate');
-      if(!cellDk) return;
-      const isMissed=!!missedMap[cellDk];
-      const isToday=cellDk===today;
-      const isSelected=cellDk===dk;
-      if(isSelected){cell.style.background='rgba(233,30,140,0.2)';cell.style.border='1px solid var(--pink)';cell.style.color='var(--pink)';}
-      else if(isMissed){cell.style.background='var(--red-soft)';cell.style.border='1px solid rgba(239,68,68,0.5)';cell.style.color='var(--red)';}
-      else if(isToday){cell.style.background='var(--blue-soft)';cell.style.border='1px solid rgba(59,130,246,0.4)';cell.style.color='var(--blue)';}
-      else{cell.style.background='var(--surface)';cell.style.border='1px solid var(--border2)';cell.style.color='var(--muted)';}
-    });
-  }
+  renderAlarmCalendar();
   const detail=document.getElementById('alarm-detail-panel');
   if(!detail)return;
+  const missedMap=getMissedDaysMap();
   const parts=dk.split('-');
   const label=dayNum+' '+ALARM_CAL_MONTHS[parseInt(parts[1])-1]+' '+parts[0];
   const dayMissed=missedMap[dk]||{};
@@ -1219,18 +1201,17 @@ function alarmCalSelectDate(dk,dayNum){
   ttl.style.cssText='font-size:12px;font-weight:700;color:var(--pink);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;';
   ttl.textContent='Checks for '+label;
   wrap.appendChild(ttl);
-  ['day','night'].forEach(function(sh){
-    const missedSlots=new Set((dayMissed[sh]||[]).map(function(c){return c.slot;}));
+  ['day','night'].forEach(sh=>{
+    const missedSlots=new Set((dayMissed[sh]||[]).map(c=>c.slot));
     const hasMissed=missedSlots.size>0;
     const times=sh==='day'?['07:00','11:00','15:00']:['19:00','23:00','03:00'];
     const card=document.createElement('div');
     card.style.cssText='background:var(--surface2);border:1px solid '+(hasMissed?'rgba(239,68,68,0.5)':'var(--border)')+';border-radius:var(--radius-xs);margin-bottom:10px;overflow:hidden;';
     const hdr=document.createElement('div');
     hdr.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border2);';
-    hdr.innerHTML='<span style="font-size:13px;font-weight:700;">'+(sh==='day'?'☀️ Day Shift':'🌙 Night Shift')+'<span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:6px;">'+(sh==='day'?'07:00–19:00':'19:00–07:00')+'</span></span>'
-      +(hasMissed?'<span style="font-size:11px;font-weight:700;color:var(--red);background:var(--red-soft);border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:2px 8px;">'+missedSlots.size+' MISSED</span>':'<span style="font-size:11px;font-weight:700;color:var(--green);">✓ Complete</span>');
+    hdr.innerHTML='<span style="font-size:13px;font-weight:700;">'+(sh==='day'?'☀️ Day Shift':'🌙 Night Shift')+'<span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:6px;">'+(sh==='day'?'07:00–19:00':'19:00–07:00')+'</span></span>'+(hasMissed?'<span style="font-size:11px;font-weight:700;color:var(--red);background:var(--red-soft);border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:2px 8px;">'+missedSlots.size+' MISSED</span>':'<span style="font-size:11px;font-weight:700;color:var(--green);">✓ Complete</span>');
     card.appendChild(hdr);
-    times.forEach(function(t,i){
+    times.forEach((t,i)=>{
       const isMissedSlot=missedSlots.has(i);
       const row=document.createElement('div');
       row.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border2);background:'+(isMissedSlot?'rgba(239,68,68,0.07)':'transparent')+';'+(isMissedSlot?'cursor:pointer;':'');
@@ -1241,11 +1222,9 @@ function alarmCalSelectDate(dk,dayNum){
         const btn=document.createElement('button');
         btn.textContent='Fill In';
         btn.style.cssText='background:var(--pink);border:none;color:#fff;border-radius:var(--radius-xs);padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);';
-        (function(shift,slot,date){
-          btn.addEventListener('click',function(e){e.stopPropagation();promptOperator('check',slot,true,date,shift);});
-          row.addEventListener('click',function(){promptOperator('check',slot,true,date,shift);});
-        })(sh,i,dk);
+        btn.addEventListener('click',function(e){e.stopPropagation();promptOperator('check',i,true,dk,sh);});
         right.appendChild(btn);
+        row.addEventListener('click',function(){promptOperator('check',i,true,dk,sh);});
       }else{
         right.innerHTML='<span style="font-size:12px;color:var(--green);font-weight:700;">✓ Done</span>';
       }
@@ -1255,6 +1234,8 @@ function alarmCalSelectDate(dk,dayNum){
     wrap.appendChild(card);
   });
   detail.appendChild(wrap);
+  // Scroll detail panel into view
+  setTimeout(function(){detail.scrollIntoView({behavior:'smooth',block:'start'});},50);
 }
 
 function alarmCalPrev(){
