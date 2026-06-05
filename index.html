@@ -460,13 +460,8 @@ html,body{height:100%;overflow:hidden;background:var(--navy);font-family:var(--f
 <div class="screen-content">
   <div class="screen-title">Edit Records</div>
   <div class="screen-sub">Correct or backfill check data</div>
-  <div style="margin:10px 0 6px;">
-    <div style="display:flex;gap:8px;margin-bottom:8px;">
-      <button class="chip active" id="edit-filter-all">All</button>
-      <button class="chip" id="edit-filter-dupes">⚠ Duplicates</button>
-      <button class="chip" id="edit-filter-flags">🚨 Flagged</button>
-    </div>
-    <div class="fu-row" style="margin-bottom:8px;"><label>Filter by date (optional)</label>
+  <div style="margin:10px 0;">
+    <div class="fu-row"><label>Filter by date</label>
       <input type="date" class="fu-input" id="edit-date-filter" oninput="renderEditList()">
     </div>
     <button class="btn-primary" style="margin-bottom:10px;" onclick="openAddBackfill()">+ Add Historical Check / Event</button>
@@ -1064,7 +1059,7 @@ function submitWiz(){
   const sf=wiz.data.smoke==='yes',of2=wiz.data.odour==='yes',cf=wiz.data.complaints==='yes',ef=wiz.data.events==='yes',offsite=wiz.data.odour_offsite==='yes';
   const sev=(wiz.data.ev_severity||wiz.data.evsev||'').toLowerCase(),crit=sev.includes('high')||sev.includes('critical');
   let flag='ok';if(sf||crit||(of2&&offsite))flag='alert';else if(of2||cf||ef)flag='warn';
-  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(of2&&offsite)||(sf&&(wiz.data.smoke_cause||'').includes('exceedance')),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
+  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(of2&&offsite)||(sf&&(wiz.data.smoke_cause||'').includes('exceedance'))||(wiz.data.odour_coct_report==='yes'),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
   addRecord(rec);updateHomeChecks();
   wiz.submitted=true;
   const body=document.getElementById('wiz-body');
@@ -1645,13 +1640,29 @@ async function generatePDF(type){
   incs.forEach((r,i)=>{
     const _iKey=r.id||i;
     if(y>PH-40){doc.addPage();y=4;try{const _hw=Math.round(42*3.205),_hh=42;doc.addImage('data:image/jpeg;base64,'+HEADER_B64,'JPEG',ML,4,_hw,_hh);}catch(e){}y=54;}
-    doc.setFillColor(253,240,245);doc.rect(ML,y,TW,6,'F');
-    doc.setTextColor(...pink);doc.setFontSize(8);doc.setFont('helvetica','bold');
+    // Incident header row - clean layout
+    doc.setFillColor(253,240,245);doc.rect(ML,y,TW,7,'F');
+    doc.setTextColor(...pink);doc.setFontSize(8.5);doc.setFont('helvetica','bold');
     const _coctOv4=window._compOverride&&window._compOverride[3];
     const _showCoct4=r.requiresCoCT&&!(_coctOv4&&(_coctOv4.cls==='na'||_coctOv4.res==='N/A'));
-    doc.text(`${getInspectionDate(r)} ${getInspectionTime(r)} · ${r.operator||'—'} · ${_showCoct4?'⚠ CoCT Notification Required':''}`,ML+2,y+4.5);y+=8;
-    if(r.smokeFlag){const exempt=r.data.smoke_startup_exempt==='yes'?' [NEM:AQA s22 EXEMPT]':'';row('Smoke',(r.data.smoke_colour||'?')+' · '+(r.data.smoke_duration||'?')+'min · '+(r.data.smoke_cause||'?')+exempt+' · Action: '+(r.data.smoke_action||'—'),!r.data.smoke_startup_exempt||r.data.smoke_startup_exempt!=='yes');}
-    if(r.odourFlag){const src=r.data.odour_source?(' · Source: '+r.data.odour_source):'';const rptCoct=r.data.odour_coct_report==='yes'?' [Reported to CoCT]':r.data.odour_coct_report==='no'?' [Not reported — external source]':'';row('Odour',(r.data.odour_type||'?')+' intensity '+(r.data.odour_intensity||'?')+'/5'+(r.data.odour_offsite==='yes'?' — OFF-SITE':'')+src+rptCoct+' · '+(r.data.odour_action||'—'),r.data.odour_source&&r.data.odour_source.includes('External'));}
+    const _hdrText=getInspectionDate(r)+' '+getInspectionTime(r)+' · '+(r.operator||'—')+(_showCoct4?' · ⚠ CoCT Notification Required':'');
+    doc.text(_hdrText,ML+2,y+5);y+=9;
+    if(r.smokeFlag){
+      const exempt=r.data.smoke_startup_exempt==='yes'?' [NEM:AQA s22 EXEMPT]':'';
+      const smokeDetail=(r.data.smoke_colour||'?')+', '+(r.data.smoke_duration||'?')+' min, '+(r.data.smoke_cause||'?')+exempt;
+      const smokeAction='Action: '+(r.data.smoke_action||'—');
+      row('Smoke',smokeDetail,!r.data.smoke_startup_exempt||r.data.smoke_startup_exempt!=='yes');
+      row('',smokeAction,false);
+    }
+    if(r.odourFlag){
+      const offsite=r.data.odour_offsite==='yes'?' (Off-site)':'';
+      const src=r.data.odour_source?' · '+r.data.odour_source:'';
+      const coct=r.data.odour_coct_report==='yes'?' · CoCT Notified':r.data.odour_coct_report==='no'?' · CoCT Not notified (external)':'';
+      const odourDetail='Intensity '+(r.data.odour_intensity||'?')+'/5'+offsite+', '+(r.data.odour_type||'?')+src+coct;
+      const odourAction='Action: '+(r.data.odour_action||'—');
+      row('Odour',odourDetail,r.data.odour_source&&r.data.odour_source.includes('External'));
+      row('',odourAction,false);
+    }
     if(r.compFlag)row('Complaint',(r.data.comp_count||'1')+' × '+(r.data.comp_type||'?')+' · '+(r.data.comp_response||'—'),true);
     if(r.evFlag)row('Event',(r.data.ev_type||r.data.evtype||'?')+' · '+(r.data.ev_severity||r.data.evsev||'?')+' · '+(r.data.ev_desc||r.data.ev_desc_e||'—'),true);
     const _iComment=window._incComments&&window._incComments[_iKey];
@@ -1721,76 +1732,18 @@ async function generatePDF(type){
 }
 
 // ════════════ EDIT SCREEN ════════════
-function setEditFilter(f,elId){
-  window._editFilter=f;
-  ['edit-filter-all','edit-filter-dupes','edit-filter-flags'].forEach(function(id){
-    var b=document.getElementById(id);if(b)b.classList.remove('active');
-  });
-  var active=document.getElementById(elId);if(active)active.classList.add('active');
-  renderEditList();
-}
 function renderEditList(){
-  var fa=document.getElementById('edit-filter-all');
-  var fd=document.getElementById('edit-filter-dupes');
-  var ff=document.getElementById('edit-filter-flags');
-  if(fa&&!fa._wired){fa._wired=true;fa.addEventListener('click',function(){setEditFilter('all','edit-filter-all');});}
-  if(fd&&!fd._wired){fd._wired=true;fd.addEventListener('click',function(){setEditFilter('dupes','edit-filter-dupes');});}
-  if(ff&&!ff._wired){ff._wired=true;ff.addEventListener('click',function(){setEditFilter('flags','edit-filter-flags');});}
-  var filterDate=document.getElementById('edit-date-filter')?document.getElementById('edit-date-filter').value:'';
-  var db=getDB();var recs=db.records.slice();
-  if(filterDate)recs=recs.filter(function(r){return new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate;});
-  // Find duplicates
-  var seen={};var dupeIds=new Set();
-  db.records.filter(function(r){return r.type==='check';}).forEach(function(r){
-    var dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    var key=dk+'|'+r.shift+'|'+r.checkSlot;
-    if(seen[key]){dupeIds.add(r.id);dupeIds.add(seen[key]);}else{seen[key]=r.id;}
-  });
-  var activeFilter=window._editFilter||'all';
-  if(activeFilter==='dupes')recs=recs.filter(function(r){return dupeIds.has(r.id);});
-  else if(activeFilter==='flags')recs=recs.filter(function(r){return r.flag==='alert'||r.flag==='warn';});
-  recs=recs.slice(0,200);
-  var el=document.getElementById('edit-list');if(!el)return;
-  el.innerHTML='';
-  if(dupeIds.size>0&&activeFilter!=='dupes'){
-    var banner=document.createElement('div');
-    banner.style.cssText='background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:var(--radius-xs);padding:10px 14px;margin-bottom:10px;font-size:12px;color:var(--amber);cursor:pointer;';
-    banner.innerHTML='⚠ <strong>'+dupeIds.size+' duplicate records detected</strong> — tap to view';
-    banner.addEventListener('click',function(){setEditFilter('dupes','edit-filter-dupes');});
-    el.appendChild(banner);
-  }
-  if(!recs.length){
-    var empty=document.createElement('div');empty.className='log-empty';
-    empty.style.cssText='padding:30px 20px;text-align:center;';
-    empty.textContent=activeFilter==='dupes'?'No duplicates found':'No records found';
-    el.appendChild(empty);return;
-  }
-  recs.forEach(function(r){
-    var isDupe=dupeIds.has(r.id);
-    var dk=new Date(r.timestamp).toLocaleDateString('en-CA');
-    var tm=(r.data&&r.data.inspection_time)?r.data.inspection_time:fmtTime(r.timestamp);
-    var issues=(r.smokeFlag?'🔥 ':'')+(r.odourFlag?'👃 ':'')+(r.compFlag?'📣 ':'')+(r.evFlag?'⚙️ ':(r.flag==='ok'?'✅ Clear':''));
-    var entry=document.createElement('div');entry.className='edit-entry';
-    if(isDupe)entry.style.cssText='border-color:rgba(245,158,11,0.5);background:rgba(245,158,11,0.04);';
-    else if(r.flag==='alert')entry.style.borderColor='rgba(239,68,68,0.4)';
-    var hdr=document.createElement('div');hdr.className='edit-entry-hdr';
-    var left=document.createElement('div');left.style.cssText='flex:1;min-width:0;';
-    var title=document.createElement('div');title.className='edit-entry-title';
-    title.textContent=(r.checkLabel||r.type)+' · '+(r.operator||'—');
-    if(isDupe){var badge=document.createElement('span');badge.style.cssText='background:rgba(245,158,11,0.2);color:var(--amber);border:1px solid rgba(245,158,11,0.4);border-radius:4px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:5px;';badge.textContent='⚠ DUPE';title.appendChild(badge);}
-    var meta=document.createElement('div');meta.className='edit-entry-meta';
-    meta.textContent=dk+' '+tm+' · '+(r.shift==='day'?'☀️':'🌙')+' '+(r.backfill?'[backfilled] ':'')+issues;
-    left.appendChild(title);left.appendChild(meta);
-    var btns=document.createElement('div');btns.style.cssText='display:flex;gap:4px;flex-shrink:0;';
-    var editBtn=document.createElement('button');editBtn.className='edit-btn';editBtn.textContent='Edit';
-    var delBtn=document.createElement('button');delBtn.className='del-btn';delBtn.textContent='Delete';
-    (function(id){
-      editBtn.addEventListener('click',function(){editRecord(id);});
-      delBtn.addEventListener('click',function(){confirmDelete(id);});
-    })(r.id);
-    btns.appendChild(editBtn);btns.appendChild(delBtn);
-    hdr.appendChild(left);hdr.appendChild(btns);entry.appendChild(hdr);el.appendChild(entry);
-  });
+  const filterDate=document.getElementById('edit-date-filter')?.value;
+  const db=getDB();let recs=db.records;
+  if(filterDate)recs=recs.filter(r=>new Date(r.timestamp).toLocaleDateString('en-CA')===filterDate);
+  recs=recs.slice(0,100);
+  const el=document.getElementById('edit-list');if(!el)return;
+  if(!recs.length){el.innerHTML=`<div class="log-empty">No records found.<br><br>Use the date filter above or clear it to see all.</div>`;return;}
+  el.innerHTML=recs.map(r=>{
+    const fc=r.flag==='alert'?'pill-alert':r.flag==='warn'?'pill-warn':'pill-ok';
+    let issues=r.smokeFlag?'🔥 ':''+(r.odourFlag?'👃 ':''+(r.compFlag?'📣 ':''+(r.evFlag?'⚙️ ':'')));
+    return`<div class="edit-entry"><div class="edit-entry-hdr"><div><div class="edit-entry-title">${r.checkLabel} · ${r.operator||'—'}</div><div class="edit-entry-meta">${fmtDate(r.timestamp)} ${fmtTime(r.timestamp)} · ${r.shift==='day'?'☀️':'🌙'} ${r.backfill?'[backfilled]':''} ${issues}</div></div><div style="display:flex;gap:4px;"><button class="edit-btn" onclick="editRecord('${r.id}')">Edit</button><button class="del-btn" onclick="confirmDelete('${r.id}')">Delete</button></div></div><div class="pill ${fc}" style="display:inline-block;margin-top:4px;">${r.flag.toUpperCase()}</div></div>`;
+  }).join('');
 }
 function confirmDelete(id){if(confirm('Delete this record? This cannot be undone.'))deleteRecord(id);}
 let _editRecId=null;
@@ -1996,7 +1949,6 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   if(id==='screen-alarms')setTimeout(renderAlarms,50);
-  if(id==='screen-edit')setTimeout(renderEditList,50);
   document.getElementById(id).classList.add('active');
   const map={'screen-home':0,'screen-log':1,'screen-report':2,'screen-edit':3,'screen-settings':4};
   const idx=map[id];if(idx!==undefined)document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
