@@ -1735,119 +1735,93 @@ function editRecord(id){
   const db=getDB(),rec=db.records.find(r=>r.id===id);if(!rec)return;
   _editRecId=id;
   const users=getUsers();
-  const userOpts=users.map(u=>'<option value="'+u.name+'" '+(u.name===rec.operator?'selected':'')+'>'+u.name+'</option>').join('');
   const inspTime=(rec.data&&rec.data.inspection_time?rec.data.inspection_time.substring(0,5):'');
   const inspDate=(rec.data&&rec.data.inspection_date?rec.data.inspection_date:new Date(rec.timestamp).toLocaleDateString('en-CA'));
-  const flags=['smokeFlag','odourFlag','compFlag','evFlag'];
-  const flagLabels={'smokeFlag':'🔥 Smoke','odourFlag':'👃 Odour','compFlag':'📣 Complaint','evFlag':'⚙️ Event'};
+  const userOpts=users.map(function(u){return '<option value="'+u.name+'"'+(u.name===rec.operator?' selected':'')+'>'+u.name+'</option>';}).join('');
+  const hasManual=!users.find(function(u){return u.name===rec.operator;});
   document.getElementById('edit-rec-body').innerHTML=
-    // Operator
     '<div class="fu-row"><label>Operator</label>'
-    +'<select class="fu-select" id="er-operator"><option value="">— select —</option>'+userOpts+'<option value="__manual__">Type manually...</option></select>'
-    +'<input class="fu-input" id="er-op-manual" placeholder="Type name" style="display:'+(users.find(u=>u.name===rec.operator)?'none':'block')+';margin-top:6px;" value="'+(users.find(u=>u.name===rec.operator)?'':rec.operator||'')+'"></div>'
-    // Check
-    +'<div class="fu-row"><label>Check Number</label>'
-    +'<div style="display:flex;gap:8px;">'
-    +['Check 1','Check 2','Check 3'].map((l,i)=>'<button class="shift-pick-btn '+(rec.checkSlot===i?'active':'')+'" onclick="[0,1,2].forEach(j=>{const b=document.getElementById('er-slot-'+j);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot='+i+';" id="er-slot-'+i+'">'+l+'</button>').join('')
+    +'<select class="fu-select" id="er-operator" onchange="document.getElementById('er-op-manual').style.display=this.value==='__manual__'?'block':'none';">'
+    +'<option value="">— select —</option>'+userOpts+'<option value="__manual__">Type manually...</option>'
+    +'</select>'
+    +'<input class="fu-input" id="er-op-manual" placeholder="Type name" style="display:'+(hasManual?'block':'none')+';margin-top:6px;" value="'+(hasManual?rec.operator||'':'')+'"></div>'
+    +'<div class="fu-row"><label>Check Number</label><div style="display:flex;gap:8px;">'
+    +'<button class="shift-pick-btn '+(rec.checkSlot===0?'active':'')+'" id="er-s0" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=0;">Check 1</button>'
+    +'<button class="shift-pick-btn '+(rec.checkSlot===1?'active':'')+'" id="er-s1" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=1;">Check 2</button>'
+    +'<button class="shift-pick-btn '+(rec.checkSlot===2?'active':'')+'" id="er-s2" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('er-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._erSlot=2;">Check 3</button>'
     +'</div></div>'
-    // Shift
-    +'<div class="fu-row"><label>Shift</label>'
-    +'<div style="display:flex;gap:8px;">'
+    +'<div class="fu-row"><label>Shift</label><div style="display:flex;gap:8px;">'
     +'<button class="shift-pick-btn '+(rec.shift==='day'?'active':'')+'" id="er-day" onclick="document.getElementById('er-day').classList.add('active');document.getElementById('er-night').classList.remove('active');window._erShift='day';">☀️ Day</button>'
     +'<button class="shift-pick-btn '+(rec.shift==='night'?'active':'')+'" id="er-night" onclick="document.getElementById('er-night').classList.add('active');document.getElementById('er-day').classList.remove('active');window._erShift='night';">🌙 Night</button>'
     +'</div></div>'
-    // Date & Time
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    +'<div class="fu-row" style="margin:0"><label>Date</label><input class="fu-input" type="date" id="er-date" value="'+inspDate+'"></div>'
-    +'<div class="fu-row" style="margin:0"><label>Time</label><input class="fu-input" type="time" id="er-time" value="'+inspTime+'"></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+    +'<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;">Date</label><input class="fu-input" type="date" id="er-date" value="'+inspDate+'"></div>'
+    +'<div><label style="display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;">Time</label><input class="fu-input" type="time" id="er-time" value="'+inspTime+'"></div>'
     +'</div>'
-    // Flags
-    +'<div class="fu-row" style="margin-top:14px;"><label>Flags</label>'
-    +'<div style="display:flex;flex-wrap:wrap;gap:8px;">'
-    +flags.map(f=>'<button class="shift-pick-btn '+(rec[f]?'active':'')+'" id="er-'+f+'" onclick="this.classList.toggle('active');">'+flagLabels[f]+'</button>').join('')
+    +'<div class="fu-row"><label>Flags</label><div style="display:flex;flex-wrap:wrap;gap:8px;">'
+    +'<button class="shift-pick-btn '+(rec.smokeFlag?'active':'')+'" id="er-smoke" onclick="this.classList.toggle('active');">🔥 Smoke</button>'
+    +'<button class="shift-pick-btn '+(rec.odourFlag?'active':'')+'" id="er-odour" onclick="this.classList.toggle('active');">👃 Odour</button>'
+    +'<button class="shift-pick-btn '+(rec.compFlag?'active':'')+'" id="er-comp" onclick="this.classList.toggle('active');">📣 Complaint</button>'
+    +'<button class="shift-pick-btn '+(rec.evFlag?'active':'')+'" id="er-ev" onclick="this.classList.toggle('active');">⚙️ Event</button>'
     +'</div></div>'
-    // Notes
     +'<div class="fu-row"><label>General Notes</label><textarea class="fu-textarea" id="er-notes">'+(rec.data&&rec.data.gen_notes?rec.data.gen_notes:'')+'</textarea></div>';
   window._erSlot=rec.checkSlot>=0?rec.checkSlot:0;
   window._erShift=rec.shift||'day';
-  // Operator manual toggle
-  const sel=document.getElementById('er-operator');
-  if(sel) sel.addEventListener('change',function(){
-    document.getElementById('er-op-manual').style.display=this.value==='__manual__'?'block':'none';
-  });
   document.getElementById('edit-rec-overlay').style.display='flex';
 }
 function closeEditRec(){document.getElementById('edit-rec-overlay').style.display='none';_editRecId=null;}
 function saveEditRec(){
   if(!_editRecId)return;
-  const db=getDB(),rec=db.records.find(r=>r.id===_editRecId);if(!rec)return;
+  const db=getDB(),rec=db.records.find(function(r){return r.id===_editRecId;});if(!rec)return;
   const opSel=document.getElementById('er-operator').value;
-  const op=opSel==='__manual__'?document.getElementById('er-op-manual').value.trim():opSel||rec.operator;
+  const op=opSel==='__manual__'?document.getElementById('er-op-manual').value.trim():(opSel||rec.operator);
   const date=document.getElementById('er-date').value||new Date(rec.timestamp).toLocaleDateString('en-CA');
   const time=document.getElementById('er-time').value;
   const slot=typeof window._erSlot==='number'?window._erSlot:rec.checkSlot;
   const shift=window._erShift||rec.shift;
   const notes=document.getElementById('er-notes').value.trim();
-  const smoke=document.getElementById('er-smokeFlag')?.classList.contains('active')||false;
-  const odour=document.getElementById('er-odourFlag')?.classList.contains('active')||false;
-  const comp=document.getElementById('er-compFlag')?.classList.contains('active')||false;
-  const ev=document.getElementById('er-evFlag')?.classList.contains('active')||false;
+  const smoke=document.getElementById('er-smoke').classList.contains('active');
+  const odour=document.getElementById('er-odour').classList.contains('active');
+  const comp=document.getElementById('er-comp').classList.contains('active');
+  const ev=document.getElementById('er-ev').classList.contains('active');
   const flag=smoke||odour||comp||ev?'alert':'ok';
-  // Build new timestamp from date+time
   let ts=rec.timestamp;
-  if(date){
-    const [h,m]=(time||'00:00').split(':');
-    ts=new Date(date+'T'+String(h||0).padStart(2,'0')+':'+String(m||0).padStart(2,'0')+':00').toISOString();
-  }
-  updateRecord(_editRecId,{
-    operator:op,shift,checkSlot:slot,
-    checkLabel:'Check '+(slot+1),
-    flag,smokeFlag:smoke,odourFlag:odour,compFlag:comp,evFlag:ev,
-    timestamp:ts,
-    data:{...rec.data,inspection_time:time,inspection_date:date,gen_notes:notes}
-  });
+  if(date&&time){const[h,m]=time.split(':');ts=new Date(date+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').toISOString();}
+  else if(date){ts=new Date(date+'T12:00:00').toISOString();}
+  updateRecord(_editRecId,{operator:op,shift:shift,checkSlot:slot,checkLabel:'Check '+(slot+1),flag:flag,smokeFlag:smoke,odourFlag:odour,compFlag:comp,evFlag:ev,timestamp:ts,data:{...rec.data,inspection_time:time,inspection_date:date,gen_notes:notes}});
   closeEditRec();
   renderEditList();
 }
 function openAddBackfill(){
   const users=getUsers();
-  const userOpts=users.map(u=>`<option value="${u.name}">${u.name} (${u.role})</option>`).join('');
+  const userOpts=users.map(function(u){return '<option value="'+u.name+'">'+u.name+' ('+u.role+')</option>';}).join('');
   const el=document.getElementById('edit-list');
-  el.innerHTML=`<div class="add-user-form" id="backfill-form" style="margin-bottom:12px;">
-    <div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--pink);">&#128197; Add Historical Record</div>
-    <div class="fu-row"><label>Date</label><input type="date" class="fu-input" id="bf-date" value="${new Date().toLocaleDateString('en-CA')}"></div>
-    <div class="fu-row"><label>Shift</label>
-      <div style="display:flex;gap:8px;">
-        <button class="shift-pick-btn active" id="bf-day" onclick="document.getElementById('bf-day').classList.add('active');document.getElementById('bf-night').classList.remove('active');window._bfShift='day';" style="flex:1;">&#9728;&#65039; Day (07:00-19:00)</button>
-        <button class="shift-pick-btn" id="bf-night" onclick="document.getElementById('bf-night').classList.add('active');document.getElementById('bf-day').classList.remove('active');window._bfShift='night';" style="flex:1;">&#127769; Night (19:00-07:00)</button>
-      </div>
-    </div>
-    <div class="fu-row"><label>Record type</label>
-      <div style="display:flex;gap:8px;">
-        <button class="shift-pick-btn active" id="bf-check-btn" onclick="document.getElementById('bf-check-btn').classList.add('active');document.getElementById('bf-event-btn').classList.remove('active');document.getElementById('bf-slot-row').style.display='block';window._bfType='check';" style="flex:1;">&#128203; Check</button>
-        <button class="shift-pick-btn" id="bf-event-btn" onclick="document.getElementById('bf-event-btn').classList.add('active');document.getElementById('bf-check-btn').classList.remove('active');document.getElementById('bf-slot-row').style.display='none';window._bfType='event';" style="flex:1;">&#9888;&#65039; Event</button>
-      </div>
-    </div>
-    <div class="fu-row" id="bf-slot-row"><label>Check number</label>
-      <div style="display:flex;gap:8px;">
-        <button class="shift-pick-btn active" id="bf-s0" onclick="[0,1,2].forEach(i=>document.getElementById('bf-s'+i).classList.remove('active'));this.classList.add('active');window._bfSlot=0;" style="flex:1;">Check 1</button>
-        <button class="shift-pick-btn" id="bf-s1" onclick="[0,1,2].forEach(i=>document.getElementById('bf-s'+i).classList.remove('active'));this.classList.add('active');window._bfSlot=1;" style="flex:1;">Check 2</button>
-        <button class="shift-pick-btn" id="bf-s2" onclick="[0,1,2].forEach(i=>document.getElementById('bf-s'+i).classList.remove('active'));this.classList.add('active');window._bfSlot=2;" style="flex:1;">Check 3</button>
-      </div>
-    </div>
-    <div class="fu-row"><label>Operator</label>
-      <select class="fu-select" id="bf-operator" onchange="document.getElementById('bf-op-manual').style.display=this.value==='__manual__'?'block':'none';">
-        <option value="">- select -</option>
-        ${userOpts}
-        <option value="__manual__">Type manually...</option>
-      </select>
-      <input type="text" class="fu-input" id="bf-op-manual" placeholder="Enter name" style="display:none;margin-top:6px;">
-    </div>
-    <div style="display:flex;gap:8px;margin-top:4px;">
-      <button class="btn-secondary" style="margin:0;" onclick="renderEditList()">Cancel</button>
-      <button class="btn-primary" style="margin:0;" onclick="confirmBackfill()">Start Entry &rarr;</button>
-    </div>
-  </div>`;
+  const today=new Date().toLocaleDateString('en-CA');
+  el.innerHTML='<div class="add-user-form" id="backfill-form" style="margin-bottom:12px;">'
+    +'<div style="font-size:14px;font-weight:700;margin-bottom:12px;color:var(--pink);">📅 Add Historical Record</div>'
+    +'<div class="fu-row"><label>Date</label><input type="date" class="fu-input" id="bf-date" value="'+today+'"></div>'
+    +'<div class="fu-row"><label>Shift</label><div style="display:flex;gap:8px;">'
+    +'<button class="shift-pick-btn active" id="bf-day" onclick="document.getElementById('bf-day').classList.add('active');document.getElementById('bf-night').classList.remove('active');window._bfShift='day';" style="flex:1;">☀️ Day (07:00-19:00)</button>'
+    +'<button class="shift-pick-btn" id="bf-night" onclick="document.getElementById('bf-night').classList.add('active');document.getElementById('bf-day').classList.remove('active');window._bfShift='night';" style="flex:1;">🌙 Night (19:00-07:00)</button>'
+    +'</div></div>'
+    +'<div class="fu-row"><label>Record type</label><div style="display:flex;gap:8px;">'
+    +'<button class="shift-pick-btn active" id="bf-check-btn" onclick="document.getElementById('bf-check-btn').classList.add('active');document.getElementById('bf-event-btn').classList.remove('active');document.getElementById('bf-slot-row').style.display='block';window._bfType='check';" style="flex:1;">📋 Check</button>'
+    +'<button class="shift-pick-btn" id="bf-event-btn" onclick="document.getElementById('bf-event-btn').classList.add('active');document.getElementById('bf-check-btn').classList.remove('active');document.getElementById('bf-slot-row').style.display='none';window._bfType='event';" style="flex:1;">⚠️ Event</button>'
+    +'</div></div>'
+    +'<div class="fu-row" id="bf-slot-row"><label>Check number</label><div style="display:flex;gap:8px;">'
+    +'<button class="shift-pick-btn active" id="bf-s0" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('bf-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._bfSlot=0;" style="flex:1;">Check 1</button>'
+    +'<button class="shift-pick-btn" id="bf-s1" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('bf-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._bfSlot=1;" style="flex:1;">Check 2</button>'
+    +'<button class="shift-pick-btn" id="bf-s2" onclick="[0,1,2].forEach(function(i){var b=document.getElementById('bf-s'+i);if(b)b.classList.remove('active');});this.classList.add('active');window._bfSlot=2;" style="flex:1;">Check 3</button>'
+    +'</div></div>'
+    +'<div class="fu-row"><label>Operator</label>'
+    +'<select class="fu-select" id="bf-operator" onchange="document.getElementById('bf-op-manual').style.display=this.value==='__manual__'?'block':'none';">'
+    +'<option value="">- select -</option>'+userOpts+'<option value="__manual__">Type manually...</option>'
+    +'</select>'
+    +'<input type="text" class="fu-input" id="bf-op-manual" placeholder="Enter name" style="display:none;margin-top:6px;"></div>'
+    +'<div style="display:flex;gap:8px;margin-top:4px;">'
+    +'<button class="btn-secondary" style="margin:0;" onclick="renderEditList()">Cancel</button>'
+    +'<button class="btn-primary" style="margin:0;" onclick="confirmBackfill()">Start Entry →</button>'
+    +'</div></div>';
   window._bfShift='day';window._bfType='check';window._bfSlot=0;
 }
 
