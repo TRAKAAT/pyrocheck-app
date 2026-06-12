@@ -1059,7 +1059,7 @@ function submitWiz(){
   const sf=wiz.data.smoke==='yes',of2=wiz.data.odour==='yes',cf=wiz.data.complaints==='yes',ef=wiz.data.events==='yes',offsite=wiz.data.odour_offsite==='yes';
   const sev=(wiz.data.ev_severity||wiz.data.evsev||'').toLowerCase(),crit=sev.includes('high')||sev.includes('critical');
   let flag='ok';if(sf||crit||(of2&&offsite))flag='alert';else if(of2||cf||ef)flag='warn';
-  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(sf&&(wiz.data.smoke_cause||'').includes('exceedance'))||(wiz.data.odour_coct_report==='yes'),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
+  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(of2&&offsite)||(sf&&(wiz.data.smoke_cause||'').includes('exceedance'))||(wiz.data.odour_coct_report==='yes'),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
   addRecord(rec);updateHomeChecks();
   wiz.submitted=true;
   const body=document.getElementById('wiz-body');
@@ -1121,8 +1121,8 @@ function getMissedDaysMap(){
   const db=getDB();
   const todayStr=todayKey();
   const done={};
-  const activeDays={};
-  // Collect ALL check records regardless of checkSlot value
+  let earliestDk=null;
+  // Collect ALL check records and build done map
   db.records.filter(r=>r.type==='check').forEach(r=>{
     const t=new Date(r.timestamp);
     const dk=(r.data&&r.data.inspection_date&&String(r.data.inspection_date).trim().length>=8)
@@ -1130,14 +1130,19 @@ function getMissedDaysMap(){
       : t.toLocaleDateString('en-CA');
     if(dk>=todayStr) return;
     const sh=r.shift||(t.getHours()>=7&&t.getHours()<19?'day':'night');
-    activeDays[dk]=true;
-    // Only mark slot done if checkSlot is valid (0,1,2)
+    if(!earliestDk||dk<earliestDk) earliestDk=dk;
     if(r.checkSlot>=0&&r.checkSlot<=2){
       done[dk+'|'+sh+'|'+r.checkSlot]=true;
     }
   });
+  if(!earliestDk) return {};
+  // Iterate EVERY day from earliest record through yesterday
   const missedMap={};
-  Object.keys(activeDays).forEach(dk=>{
+  const cursor=new Date(earliestDk+'T12:00:00');
+  const yesterday=new Date(todayStr+'T12:00:00');
+  yesterday.setDate(yesterday.getDate()-1);
+  while(cursor<=yesterday){
+    const dk=cursor.toLocaleDateString('en-CA');
     ['day','night'].forEach(sh=>{
       const slots=[{slot:0,time:sh==='day'?'07:00':'19:00'},{slot:1,time:sh==='day'?'11:00':'23:00'},{slot:2,time:sh==='day'?'15:00':'03:00'}];
       const missed=slots.filter(c=>!done[dk+'|'+sh+'|'+c.slot]);
@@ -1146,7 +1151,8 @@ function getMissedDaysMap(){
         missedMap[dk][sh]=missed;
       }
     });
-  });
+    cursor.setDate(cursor.getDate()+1);
+  }
   return missedMap;
 }
 
@@ -1640,40 +1646,31 @@ async function generatePDF(type){
   incs.forEach((r,i)=>{
     const _iKey=r.id||i;
     if(y>PH-40){doc.addPage();y=4;try{const _hw=Math.round(42*3.205),_hh=42;doc.addImage('data:image/jpeg;base64,'+HEADER_B64,'JPEG',ML,4,_hw,_hh);}catch(e){}y=54;}
-    // Incident header row
+    // Incident header row - clean layout
     doc.setFillColor(253,240,245);doc.rect(ML,y,TW,7,'F');
     doc.setTextColor(...pink);doc.setFontSize(8.5);doc.setFont('helvetica','bold');
-    // Only show CoCT notification if operator explicitly chose to report
-    const _coctManual=r.data&&r.data.odour_coct_report==='yes';
-    const _hdrText=getInspectionDate(r)+' '+getInspectionTime(r)+' · '+(r.operator||'—')+(_coctManual?' · ⚠ CoCT Notified':'');
+    const _coctOv4=window._compOverride&&window._compOverride[3];
+    const _showCoct4=r.requiresCoCT&&!(_coctOv4&&(_coctOv4.cls==='na'||_coctOv4.res==='N/A'));
+    const _hdrText=getInspectionDate(r)+' '+getInspectionTime(r)+' · '+(r.operator||'—')+(_showCoct4?' · ⚠ CoCT Notification Required':'');
     doc.text(_hdrText,ML+2,y+5);y+=9;
     if(r.smokeFlag){
-      const exempt=r.data.smoke_startup_exempt==='yes'?' [Exempt: NEM:AQA s22]':'';
-      row('Smoke — Colour','  '+(r.data.smoke_colour||'Not recorded'),false);
-      row('Smoke — Duration','  '+(r.data.smoke_duration||'?')+' min',false);
-      row('Smoke — Cause','  '+(r.data.smoke_cause||'Not recorded')+exempt,!r.data.smoke_startup_exempt||r.data.smoke_startup_exempt!=='yes');
-      row('Smoke — Action','  '+(r.data.smoke_action||'—'),false);
+      const exempt=r.data.smoke_startup_exempt==='yes'?' [NEM:AQA s22 EXEMPT]':'';
+      const smokeDetail=(r.data.smoke_colour||'?')+', '+(r.data.smoke_duration||'?')+' min, '+(r.data.smoke_cause||'?')+exempt;
+      const smokeAction='Action: '+(r.data.smoke_action||'—');
+      row('Smoke',smokeDetail,!r.data.smoke_startup_exempt||r.data.smoke_startup_exempt!=='yes');
+      row('',smokeAction,false);
     }
     if(r.odourFlag){
-      const offsite=r.data.odour_offsite==='yes'?'Yes':'No';
-      const coctStatus=r.data.odour_coct_report==='yes'?'Yes — CoCT notified':r.data.odour_coct_report==='no'?'No':'Not specified';
-      row('Odour — Intensity','  '+(r.data.odour_intensity||'?')+' / 5',false);
-      row('Odour — Type','  '+(r.data.odour_type||'Not recorded'),false);
-      row('Odour — Source','  '+(r.data.odour_source||'Not recorded'),r.data.odour_source&&r.data.odour_source.includes('External'));
-      row('Odour — Off-site','  '+offsite,false);
-      row('Odour — CoCT Report','  '+coctStatus,r.data.odour_coct_report==='yes');
-      row('Odour — Action','  '+(r.data.odour_action||'—'),false);
+      const offsite=r.data.odour_offsite==='yes'?' (Off-site)':'';
+      const src=r.data.odour_source?' · '+r.data.odour_source:'';
+      const coct=r.data.odour_coct_report==='yes'?' · CoCT Notified':r.data.odour_coct_report==='no'?' · CoCT Not notified (external)':'';
+      const odourDetail='Intensity '+(r.data.odour_intensity||'?')+'/5'+offsite+', '+(r.data.odour_type||'?')+src+coct;
+      const odourAction='Action: '+(r.data.odour_action||'—');
+      row('Odour',odourDetail,r.data.odour_source&&r.data.odour_source.includes('External'));
+      row('',odourAction,false);
     }
-    if(r.compFlag){
-      row('Complaint — Count','  '+(r.data.comp_count||'1'),false);
-      row('Complaint — Type','  '+(r.data.comp_type||'Not recorded'),true);
-      row('Complaint — Response','  '+(r.data.comp_response||'—'),false);
-    }
-    if(r.evFlag){
-      row('Event — Type','  '+(r.data.ev_type||r.data.evtype||'Not recorded'),false);
-      row('Event — Severity','  '+(r.data.ev_severity||r.data.evsev||'Not recorded'),false);
-      row('Event — Description','  '+(r.data.ev_desc||r.data.ev_desc_e||'—'),false);
-    }
+    if(r.compFlag)row('Complaint',(r.data.comp_count||'1')+' × '+(r.data.comp_type||'?')+' · '+(r.data.comp_response||'—'),true);
+    if(r.evFlag)row('Event',(r.data.ev_type||r.data.evtype||'?')+' · '+(r.data.ev_severity||r.data.evsev||'?')+' · '+(r.data.ev_desc||r.data.ev_desc_e||'—'),true);
     const _iComment=window._incComments&&window._incComments[_iKey];
     if(_iComment)row('Report note',_iComment,false);
     y+=3;
