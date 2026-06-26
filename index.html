@@ -932,7 +932,7 @@ const CHECK_STEPS=[
   {id:'odour',title:'Odour Check',q:'Any unusual odours from the plant?',type:'yesno',followup:[
     {id:'odour_type',label:'Odour type',type:'select',opts:['Burning/pyrolytic','Hydrocarbon/petroleum','Sulphur (rotten eggs)','General chemical','Other']},
     {id:'odour_intensity',label:'Intensity (1=faint  5=very strong)',type:'intensity'},{id:'odour_location',label:'Where detected',type:'select',opts:['Inside reactor area','Site boundary','Off-site','Multiple locations']},
-    {id:'odour_source',label:'Source of odour',type:'select',opts:['Our plant — production related','Our plant — maintenance/other','External — neighbouring facility','External — unknown source','Cannot determine']},{id:'odour_offsite',label:'Detected off-site?',type:'yesno_inline'},{id:'odour_coct_report',label:'Report to City of Cape Town?',type:'yesno_inline'},{id:'odour_action',label:'Action taken',type:'textarea',placeholder:'Steps to reduce odour…'}]},
+    {id:'odour_source',label:'Source of odour',type:'select',opts:['Our plant — production related','Our plant — maintenance/other','External — neighbouring facility','External — unknown source','Cannot determine']},{id:'odour_offsite',label:'Detected off-site?',type:'yesno_inline'},{id:'odour_action',label:'Action taken',type:'textarea',placeholder:'Steps to reduce odour…'}]},
   {id:'complaints',title:'Community Complaints',q:'Any complaints received this period?',type:'yesno',followup:[
     {id:'comp_type',label:'Complaint type',type:'select',opts:['Smoke/dust','Odour/smell','Noise','Multiple','Other']},
     {id:'comp_count',label:'Number of complaints',type:'number',placeholder:'e.g. 2'},{id:'comp_channel',label:'How received',type:'select',opts:['Telephone','WhatsApp','In person','Email','Social media']},
@@ -1008,7 +1008,7 @@ function renderWizStep(){
 
 function buildStepHTML(s){
   let h='';
-  if(s.id==='events'||s.id==='evsev')h+=`<div class="alert-banner warn"><strong>⏱ Reminder</strong><p>High/Critical events or off-site odour require CoCT notification within 24 hours.</p></div>`;
+
   if(wiz.backfillDate)h+=`<div class="alert-banner"><strong>📅 Backfill Mode</strong><p>Recording for ${wiz.backfillDate}</p></div>`;
   h+=`<div class="step-q">${s.q}</div>`;
   if(s.type==='yesno'){
@@ -1063,7 +1063,7 @@ function submitWiz(){
   addRecord(rec);updateHomeChecks();
   wiz.submitted=true;
   const body=document.getElementById('wiz-body');
-  body.innerHTML=`<div class="completion"><div class="completion-icon">${flag==='ok'?'✅':flag==='warn'?'⚠️':'🚨'}</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">${flag==='ok'?'All Clear!':flag==='warn'?'Flagged — Review Needed':'Alert Logged!'}</div><div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;">${flag==='ok'?'Record saved. Shift looking clean.':flag==='warn'?'Record saved. Supervisor should review.':'Record saved. Consider CoCT notification.'}</div>${rec.requiresCoCT?`<div class="alert-banner"><strong>🚨 CoCT Notification May Be Required</strong><p>Notify Air Quality Management within 24 hours.</p></div>`:''}<div class="summary-card"><div class="s-row"><span class="s-key">Check</span><span class="s-val">${rec.checkLabel}</span></div><div class="s-row"><span class="s-key">Operator</span><span class="s-val">${rec.operator}</span></div><div class="s-row"><span class="s-key">Smoke</span><span class="s-val ${sf?'flag':'ok'}">${sf?'YES ⚠️':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Odour</span><span class="s-val ${of2?'warn':'ok'}">${of2?'YES '+rec.data.odour_intensity+'/5':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Complaints</span><span class="s-val ${cf?'warn':'ok'}">${cf?(rec.data.comp_count||'?')+' received':'None ✅'}</span></div><div class="s-row"><span class="s-key">Recorded at</span><span class="s-val">${now.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}</span></div></div></div>`;
+  body.innerHTML=`<div class="completion"><div class="completion-icon">${flag==='ok'?'✅':flag==='warn'?'⚠️':'🚨'}</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">${flag==='ok'?'All Clear!':flag==='warn'?'Flagged — Review Needed':'Alert Logged!'}</div><div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;">${flag==='ok'?'Record saved. Shift looking clean.':flag==='warn'?'Record saved. Supervisor should review.':'Alert logged. Supervisor notified.'}</div><div class="summary-card"><div class="s-row"><span class="s-key">Check</span><span class="s-val">${rec.checkLabel}</span></div><div class="s-row"><span class="s-key">Operator</span><span class="s-val">${rec.operator}</span></div><div class="s-row"><span class="s-key">Smoke</span><span class="s-val ${sf?'flag':'ok'}">${sf?'YES ⚠️':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Odour</span><span class="s-val ${of2?'warn':'ok'}">${of2?'YES '+rec.data.odour_intensity+'/5':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Complaints</span><span class="s-val ${cf?'warn':'ok'}">${cf?(rec.data.comp_count||'?')+' received':'None ✅'}</span></div><div class="s-row"><span class="s-key">Recorded at</span><span class="s-val">${now.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}</span></div></div></div>`;
   document.getElementById('wiz-skip').style.display='none';
   document.getElementById('wiz-next').textContent='Done ✓';
   document.getElementById('wiz-next').className='wiz-btn finish';
@@ -1431,7 +1431,7 @@ function buildWeeklyReport(){
     {label:'Visible stack emissions',sub:smoke>0?smoke+' event(s) recorded':'None recorded',ok:smoke===0,warn:false,res:smoke===0?'COMPLIANT':'NON-COMPLIANT'},
     {label:'Off-site odour migration',sub:offsite?'Off-site odour detected':odour>0?odour+' on-site event(s)':'None recorded',ok:!offsite,warn:odour>0&&!offsite,res:offsite?'NON-COMPLIANT':odour>0?'MONITOR':'COMPLIANT'},
     {label:'Community complaint response',sub:comp>0?comp+' received':'None received',ok:true,warn:false,res:comp>0?'RESPONDED':'N/A'},
-    {label:'CoCT notification',sub:coct?'Qualifying event logged':'No qualifying events',ok:!coct,warn:coct,res:coct?'ACTION REQUIRED':'Not required'},
+
     {label:'Record keeping',sub:checks+' checks this week',ok:checks>=6,warn:checks>0&&checks<6,res:checks>=6?'COMPLIANT':checks>0?'INCOMPLETE':'NO RECORDS'},
   ];
   // Scorecard with override buttons
@@ -1663,7 +1663,7 @@ async function generatePDF(type){
     if(r.odourFlag){
       const offsite=r.data.odour_offsite==='yes'?' (Off-site)':'';
       const src=r.data.odour_source?' · '+r.data.odour_source:'';
-      const coct=r.data.odour_coct_report==='yes'?' · CoCT Notified':r.data.odour_coct_report==='no'?' · CoCT Not notified (external)':'';
+      const coct='';
       const odourDetail='Intensity '+(r.data.odour_intensity||'?')+'/5'+offsite+', '+(r.data.odour_type||'?')+src+coct;
       const odourAction='Action: '+(r.data.odour_action||'—');
       row('Odour',odourDetail,r.data.odour_source&&r.data.odour_source.includes('External'));
@@ -1682,8 +1682,8 @@ async function generatePDF(type){
     const ws=document.getElementById('week-start-pick')?.value,we=document.getElementById('week-end-pick')?.value;
     const offsite=recs.some(r=>r.data&&r.data.odour_offsite==='yes'),coct=recs.some(r=>r.requiresCoCT);
     // Use overrides if set, otherwise auto
-  const sc_labels=['Visible stack emissions','Off-site odour','Complaint response','CoCT notification','Record keeping'];
-  const sc_auto=[[smoke===0?'COMPLIANT':'NON-COMPLIANT',smoke===0],[offsite?'NON-COMPLIANT':odour>0?'MONITOR':'COMPLIANT',!offsite],[comp>0?'RESPONDED':'N/A',true],[coct?'ACTION REQUIRED':'Not required',!coct],[checks>=6?'COMPLIANT':checks>0?'INCOMPLETE':'NO RECORDS',checks>=6]];
+  const sc_labels=['Visible stack emissions','Off-site odour','Complaint response','Record keeping'];
+  const sc_auto=[[smoke===0?'COMPLIANT':'NON-COMPLIANT',smoke===0],[offsite?'NON-COMPLIANT':odour>0?'MONITOR':'COMPLIANT',!offsite],[comp>0?'RESPONDED':'N/A',true],[checks>=6?'COMPLIANT':checks>0?'INCOMPLETE':'NO RECORDS',checks>=6]];
   sc_labels.map((label,i)=>{
     const ov=window._compOverride&&window._compOverride[i];
     const res=ov?ov.res:sc_auto[i][0];
