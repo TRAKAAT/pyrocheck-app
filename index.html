@@ -792,7 +792,7 @@ const FOOTER_B64 = "/9j/4SkmaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQg
 
 // ════════════ DB ════════════
 const DB='pyrocheck_db_v2', SK='pyrocheck_settings_v2';
-function getDB(){try{return JSON.parse(localStorage.getItem(DB)||'{"records":[]}');}catch(e){return{records:[]};}}
+function getDB(){try{var db=JSON.parse(localStorage.getItem(DB)||'{"records":[]}');if(db.records)db.records.forEach(function(r){if(r.requiresCoCT&&!r.smokeFlag)r.requiresCoCT=false;});return db;}catch(e){return{records:[];};}}
 function saveDB(db){localStorage.setItem(DB,JSON.stringify(db));}
 function addRecord(rec) {
   // Write to localStorage immediately (offline-first)
@@ -1059,7 +1059,7 @@ function submitWiz(){
   const sf=wiz.data.smoke==='yes',of2=wiz.data.odour==='yes',cf=wiz.data.complaints==='yes',ef=wiz.data.events==='yes',offsite=wiz.data.odour_offsite==='yes';
   const sev=(wiz.data.ev_severity||wiz.data.evsev||'').toLowerCase(),crit=sev.includes('high')||sev.includes('critical');
   let flag='ok';if(sf||crit||(of2&&offsite))flag='alert';else if(of2||cf||ef)flag='warn';
-  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(of2&&offsite)||(sf&&(wiz.data.smoke_cause||'').includes('exceedance'))||(wiz.data.odour_coct_report==='yes'),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
+  const rec={type:wiz.mode,checkSlot:wiz.mode==='check'?wiz.slot:-1,checkLabel:wiz.mode==='check'?`Check ${wiz.slot+1}`:'Event',operator:wiz.operator,shift:wiz.backfillShift||s.shift||'day',flag,smokeFlag:sf,odourFlag:of2,compFlag:cf,evFlag:ef,data:{...wiz.data},photos:wiz.photos,requiresCoCT:crit||(sf&&(wiz.data.smoke_cause||'').includes('exceedance')),backfill:!!wiz.backfillDate,timestamp:now.toISOString()};
   addRecord(rec);updateHomeChecks();
   wiz.submitted=true;
   const body=document.getElementById('wiz-body');
@@ -1380,7 +1380,7 @@ function renderIncidents(recs,containerId){
     const isExt=r.data&&r.data.odour_source&&r.data.odour_source.toLowerCase().includes('external');
     // CoCT: only show if requiresCoCT AND not overridden to N/A in scorecard
     const coctOverride=window._compOverride&&window._compOverride[3];
-    const showCoct=r.requiresCoCT&&!isExt&&!(coctOverride&&(coctOverride.cls==='na'||coctOverride.res==='N/A'||coctOverride.res==='COMPLIANT'));
+    const showCoct=false;
     return`<div class="log-entry" style="margin-bottom:10px;"><div class="log-entry-hdr"><div style="flex:1;"><div class="log-entry-title" style="font-size:13px;">${getInspectionDate(r)} ${getInspectionTime(r)}</div><div class="log-entry-meta" style="font-size:11px;margin-top:2px;">${r.checkLabel} · ${r.operator||'—'} · ${r.shift==='day'?'☀️ Day':'🌙 Night'}${showCoct?' · 🚨 CoCT':''}</div></div><div class="pill ${fc}" style="align-self:flex-start;">${r.flag.toUpperCase()}</div></div><div class="log-entry-body" style="margin-top:6px;font-size:12px;">${d||'Event recorded'}${comment?`<div class="inc-row" style="margin-top:4px;"><em style="color:var(--amber);">📝 ${comment}</em></div>`:''}</div></div>`;
   }).join('');
 }
@@ -1477,7 +1477,7 @@ function buildWeeklyReport(){
         if(r.compFlag)desc+=`${desc?'  |  ':''}Complaint: ${r.data.comp_type||'?'}`;
         if(r.evFlag)desc+=`${desc?'  |  ':''}Event: ${r.data.ev_type||'?'}`;
         const coctOv=window._compOverride&&window._compOverride[3];
-        const showCoCT=r.requiresCoCT&&!isExt&&!(coctOv&&(coctOv.cls==='na'||coctOv.res==='N/A'));
+        const showCoCT=false;
         return`<div class="incident-comment-card">
           <div class="incident-comment-hdr">${getInspectionDate(r)} ${getInspectionTime(r)} · ${r.operator||'—'} · ${r.checkLabel}${badge}${showCoCT?' 🚨':''}</div>
           <div class="incident-comment-meta">${desc}</div>
@@ -1520,7 +1520,7 @@ function buildWAMsg(recs,dateStr,shift){
   m+=`⚙️ Events:     ${ev===0?'✅ None':'⚠️ '+ev+' event(s)'}\n`;
   m+=`━━━━━━━━━━━━━━━━━\n`;
   recs.filter(r=>r.type==='check').forEach((r,i)=>{m+=`\n*${r.checkLabel}* (${r.operator||'—'} · ${getInspectionTime(r)})\n`;if(r.smokeFlag)m+=`  🔥 ${r.data.smoke_colour||'?'} smoke, ${r.data.smoke_duration||'?'}min — ${r.data.smoke_cause||'?'} — Action: ${r.data.smoke_action||'—'}\n`;if(r.odourFlag)m+=`  👃 ${r.data.odour_type||'?'} intensity ${r.data.odour_intensity||'?'}/5${r.data.odour_offsite==='yes'?' OFF-SITE':''} — ${r.data.odour_action||'—'}\n`;if(r.compFlag)m+=`  📣 ${r.data.comp_count||'1'} ${r.data.comp_type||'?'} complaint(s) — ${r.data.comp_response||'—'}\n`;if(!r.smokeFlag&&!r.odourFlag&&!r.compFlag&&!r.evFlag)m+='  ✅ All clear\n';});
-  if(recs.some(r=>r.requiresCoCT))m+=`\n🚨 *CoCT NOTIFICATION REQUIRED*\n`;
+
   m+=`\n_GeT Energy PyroCheck · ${t}_`;
   document.getElementById('shift-wa-preview').textContent=m;
 }
@@ -1650,8 +1650,8 @@ async function generatePDF(type){
     doc.setFillColor(253,240,245);doc.rect(ML,y,TW,7,'F');
     doc.setTextColor(...pink);doc.setFontSize(8.5);doc.setFont('helvetica','bold');
     const _coctOv4=window._compOverride&&window._compOverride[3];
-    const _showCoct4=r.requiresCoCT&&!(_coctOv4&&(_coctOv4.cls==='na'||_coctOv4.res==='N/A'));
-    const _hdrText=getInspectionDate(r)+' '+getInspectionTime(r)+' · '+(r.operator||'—')+(_showCoct4?' · ⚠ CoCT Notification Required':'');
+    const _showCoct4=false;
+    const _hdrText=getInspectionDate(r)+' '+getInspectionTime(r)+' · '+(r.operator||'—');
     doc.text(_hdrText,ML+2,y+5);y+=9;
     if(r.smokeFlag){
       const exempt=r.data.smoke_startup_exempt==='yes'?' [NEM:AQA s22 EXEMPT]':'';
