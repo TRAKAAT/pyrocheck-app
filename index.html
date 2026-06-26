@@ -792,7 +792,10 @@ const FOOTER_B64 = "/9j/4SkmaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLwA8P3hwYWNrZXQg
 
 // ════════════ DB ════════════
 const DB='pyrocheck_db_v2', SK='pyrocheck_settings_v2';
-function getDB(){try{var db=JSON.parse(localStorage.getItem(DB)||'{"records":[]}');if(db.records)db.records.forEach(function(r){if(r.requiresCoCT&&!r.smokeFlag)r.requiresCoCT=false;});return db;}catch(e){return{records:[];};}}
+function getDB(){var db;try{db=JSON.parse(localStorage.getItem(DB)||'null')||{records:[]};}catch(e){db={records:[]};}
+if(!db.records)db.records=[];
+db.records.forEach(function(r){if(r.requiresCoCT&&!r.smokeFlag)r.requiresCoCT=false;});
+return db;}
 function saveDB(db){localStorage.setItem(DB,JSON.stringify(db));}
 function addRecord(rec) {
   // Write to localStorage immediately (offline-first)
