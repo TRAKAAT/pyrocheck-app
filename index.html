@@ -930,6 +930,7 @@ const CHECK_STEPS=[
   {id:'smoke',title:'Stack Smoke',q:'Is there visible smoke from the stack?',type:'yesno',followup:[
     {id:'smoke_colour',label:'Smoke colour',type:'select',opts:['White/Steam','Light grey','Dark grey','Black','Blue/Brown']},
     {id:'smoke_start',label:'Approximate start time',type:'time'},{id:'smoke_duration',label:'Duration (minutes)',type:'number',placeholder:'e.g. 15'},
+    {id:'smoke_wind_dir',label:'Wind direction (blowing FROM)',type:'select',opts:['N','NE','E','SE','S','SW','W','NW','Variable/Calm']},
     {id:'smoke_cause',label:'Likely cause',type:'select',opts:['Start-up transient','Shutdown transient','Feedstock issue','Temperature exceedance','Afterburner issue','Unknown','Other']},{id:'smoke_startup_exempt',label:'Startup/shutdown exemption applies? (NEM:AQA s22 & SANS 1929)',type:'yesno_inline'},
     {id:'smoke_action',label:'Action taken',type:'textarea',placeholder:'Describe steps taken…'},{id:'smoke_photo',label:'Photo evidence (required)',type:'photo'}]},
   {id:'odour',title:'Odour Check',q:'Any unusual odours from the plant?',type:'yesno',followup:[
@@ -1066,7 +1067,7 @@ function submitWiz(){
   addRecord(rec);updateHomeChecks();
   wiz.submitted=true;
   const body=document.getElementById('wiz-body');
-  body.innerHTML=`<div class="completion"><div class="completion-icon">${flag==='ok'?'✅':flag==='warn'?'⚠️':'🚨'}</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">${flag==='ok'?'All Clear!':flag==='warn'?'Flagged — Review Needed':'Alert Logged!'}</div><div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;">${flag==='ok'?'Record saved. Shift looking clean.':flag==='warn'?'Record saved. Supervisor should review.':'Alert logged. Supervisor notified.'}</div><div class="summary-card"><div class="s-row"><span class="s-key">Check</span><span class="s-val">${rec.checkLabel}</span></div><div class="s-row"><span class="s-key">Operator</span><span class="s-val">${rec.operator}</span></div><div class="s-row"><span class="s-key">Smoke</span><span class="s-val ${sf?'flag':'ok'}">${sf?'YES ⚠️':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Odour</span><span class="s-val ${of2?'warn':'ok'}">${of2?'YES '+rec.data.odour_intensity+'/5':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Complaints</span><span class="s-val ${cf?'warn':'ok'}">${cf?(rec.data.comp_count||'?')+' received':'None ✅'}</span></div><div class="s-row"><span class="s-key">Recorded at</span><span class="s-val">${now.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}</span></div></div></div>`;
+  body.innerHTML=`<div class="completion"><div class="completion-icon">${flag==='ok'?'✅':flag==='warn'?'⚠️':'🚨'}</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">${flag==='ok'?'All Clear!':flag==='warn'?'Flagged — Review Needed':'Alert Logged!'}</div><div style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:20px;">${flag==='ok'?'Record saved. Shift looking clean.':flag==='warn'?'Record saved. Supervisor should review.':'Alert logged. Supervisor notified.'}</div><div class="summary-card"><div class="s-row"><span class="s-key">Check</span><span class="s-val">${rec.checkLabel}</span></div><div class="s-row"><span class="s-key">Operator</span><span class="s-val">${rec.operator}</span></div><div class="s-row"><span class="s-key">Smoke</span><span class="s-val ${sf?'flag':'ok'}">${sf?'YES ⚠️':'Clear ✅'}</span></div>${sf?`<div class="s-row"><span class="s-key">Wind direction</span><span class="s-val flag">${rec.data.smoke_wind_dir||'Not recorded'}</span></div>`:''}<div class="s-row"><span class="s-key">Odour</span><span class="s-val ${of2?'warn':'ok'}">${of2?'YES '+rec.data.odour_intensity+'/5':'Clear ✅'}</span></div><div class="s-row"><span class="s-key">Complaints</span><span class="s-val ${cf?'warn':'ok'}">${cf?(rec.data.comp_count||'?')+' received':'None ✅'}</span></div><div class="s-row"><span class="s-key">Recorded at</span><span class="s-val">${now.toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})}</span></div></div></div>`;
   document.getElementById('wiz-skip').style.display='none';
   document.getElementById('wiz-next').textContent='Done ✓';
   document.getElementById('wiz-next').className='wiz-btn finish';
@@ -1359,7 +1360,7 @@ function renderCheckDetail(recs,containerId){
     const t=new Date(r.timestamp),fc=r.flag==='alert'?'pill-alert':r.flag==='warn'?'pill-warn':'pill-ok',fl=r.flag==='alert'?'ALERT':r.flag==='warn'?'FLAGGED':'CLEAR';
     let rows=`<div class="s-row"><span class="s-key">Operator</span><span class="s-val">${r.operator||'—'}</span></div>`;
     rows+=`<div class="s-row"><span class="s-key">Inspection time</span><span class="s-val">${getInspectionTime(r)}</span></div>`;
-    if(r.smokeFlag)rows+=`<div class="s-row"><span class="s-key">Smoke</span><span class="s-val flag">${r.data.smoke_colour||'?'} · ${r.data.smoke_duration||'?'}min · ${r.data.smoke_cause||'?'}</span></div>`;
+    if(r.smokeFlag)rows+=`<div class="s-row"><span class="s-key">Smoke</span><span class="s-val flag">${r.data.smoke_colour||'?'} · ${r.data.smoke_duration||'?'}min · ${r.data.smoke_cause||'?'}</span></div><div class="s-row"><span class="s-key">Wind direction</span><span class="s-val flag">💨 ${r.data.smoke_wind_dir||'Not recorded'}</span></div>`;
     if(r.odourFlag)rows+=`<div class="s-row"><span class="s-key">Odour</span><span class="s-val warn">${r.data.odour_type||'?'} · ${r.data.odour_intensity||'?'}/5${r.data.odour_offsite==='yes'?' · OFF-SITE':''}</span></div>`;
     if(r.compFlag)rows+=`<div class="s-row"><span class="s-key">Complaints</span><span class="s-val warn">${r.data.comp_count||'1'} × ${r.data.comp_type||'?'}</span></div>`;
     if(r.evFlag)rows+=`<div class="s-row"><span class="s-key">Event</span><span class="s-val warn">${r.data.ev_type||'?'} (${r.data.ev_severity||'?'})</span></div>`;
@@ -1374,7 +1375,7 @@ function renderIncidents(recs,containerId){
   el.innerHTML=inc.map((r,i)=>{
     const fc=r.flag==='alert'?'pill-alert':r.flag==='warn'?'pill-warn':'pill-ok';
     let d='';
-    if(r.smokeFlag)d+=`<div class="inc-row">🔥 <strong>Smoke:</strong> ${r.data.smoke_colour||'?'}, ${r.data.smoke_duration||'?'}min, ${r.data.smoke_cause||'?'}${r.data.smoke_startup_exempt==='yes'?' <em>[s22 Exempt]</em>':''}</div><div class="inc-row" style="padding-left:18px;">Action: ${r.data.smoke_action||'—'}</div>`;
+    if(r.smokeFlag)d+=`<div class="inc-row">🔥 <strong>Smoke:</strong> ${r.data.smoke_colour||'?'}, ${r.data.smoke_duration||'?'}min, ${r.data.smoke_cause||'?'}${r.data.smoke_startup_exempt==='yes'?' <em>[s22 Exempt]</em>':''}</div><div class="inc-row" style="padding-left:18px;">💨 <strong>Wind direction:</strong> ${r.data.smoke_wind_dir||'Not recorded'}</div><div class="inc-row" style="padding-left:18px;">Action: ${r.data.smoke_action||'—'}</div>`;
     if(r.odourFlag){const src=r.data.odour_source?` · ${r.data.odour_source}`:'';d+=`<div class="inc-row">👃 <strong>Odour:</strong> ${r.data.odour_type||'?'} · ${r.data.odour_intensity||'?'}/5${r.data.odour_offsite==='yes'?' · OFF-SITE':''}${src}</div>`;}
     if(r.compFlag)d+=`<div class="inc-row">📣 <strong>Complaint:</strong> ${r.data.comp_count||'1'} × ${r.data.comp_type||'?'} via ${r.data.comp_channel||'?'}</div><div class="inc-row" style="padding-left:18px;">Response: ${r.data.comp_response||'—'}</div>`;
     if(r.evFlag)d+=`<div class="inc-row">⚙️ <strong>Event:</strong> ${r.data.ev_type||r.data.evtype||'?'} (${r.data.ev_severity||r.data.evsev||'?'})</div>${r.data.ev_desc||r.data.ev_desc_e?`<div class="inc-row" style="padding-left:18px;">${r.data.ev_desc||r.data.ev_desc_e}</div>`:''}`;
@@ -1522,7 +1523,7 @@ function buildWAMsg(recs,dateStr,shift){
   m+=`📣 Complaints: ${comp===0?'✅ None':'⚠️ '+comp+' received'}\n`;
   m+=`⚙️ Events:     ${ev===0?'✅ None':'⚠️ '+ev+' event(s)'}\n`;
   m+=`━━━━━━━━━━━━━━━━━\n`;
-  recs.filter(r=>r.type==='check').forEach((r,i)=>{m+=`\n*${r.checkLabel}* (${r.operator||'—'} · ${getInspectionTime(r)})\n`;if(r.smokeFlag)m+=`  🔥 ${r.data.smoke_colour||'?'} smoke, ${r.data.smoke_duration||'?'}min — ${r.data.smoke_cause||'?'} — Action: ${r.data.smoke_action||'—'}\n`;if(r.odourFlag)m+=`  👃 ${r.data.odour_type||'?'} intensity ${r.data.odour_intensity||'?'}/5${r.data.odour_offsite==='yes'?' OFF-SITE':''} — ${r.data.odour_action||'—'}\n`;if(r.compFlag)m+=`  📣 ${r.data.comp_count||'1'} ${r.data.comp_type||'?'} complaint(s) — ${r.data.comp_response||'—'}\n`;if(!r.smokeFlag&&!r.odourFlag&&!r.compFlag&&!r.evFlag)m+='  ✅ All clear\n';});
+  recs.filter(r=>r.type==='check').forEach((r,i)=>{m+=`\n*${r.checkLabel}* (${r.operator||'—'} · ${getInspectionTime(r)})\n`;if(r.smokeFlag)m+=`  🔥 ${r.data.smoke_colour||'?'} smoke, ${r.data.smoke_duration||'?'}min — ${r.data.smoke_cause||'?'} — Action: ${r.data.smoke_action||'—'}\n     💨 Wind direction: ${r.data.smoke_wind_dir||'Not recorded'}\n`;if(r.odourFlag)m+=`  👃 ${r.data.odour_type||'?'} intensity ${r.data.odour_intensity||'?'}/5${r.data.odour_offsite==='yes'?' OFF-SITE':''} — ${r.data.odour_action||'—'}\n`;if(r.compFlag)m+=`  📣 ${r.data.comp_count||'1'} ${r.data.comp_type||'?'} complaint(s) — ${r.data.comp_response||'—'}\n`;if(!r.smokeFlag&&!r.odourFlag&&!r.compFlag&&!r.evFlag)m+='  ✅ All clear\n';});
 
   m+=`\n_GeT Energy PyroCheck · ${t}_`;
   document.getElementById('shift-wa-preview').textContent=m;
@@ -1551,7 +1552,7 @@ function buildWeeklyEmailText(ws,we){
   w+=`City of Cape Town Air Quality Management Unit\n${"═".repeat(56)}\n\n`;
   w+=`PAEL Reference: ${s.aelRef||'—'}\nPlant ID: ${s.plantId||'—'}\nPeriod: ${fmtDate(ws+'T12:00:00')} to ${fmtDate(we+'T12:00:00')}\nPrepared by: ${s.operatorName||'GeT Energy (Pty) Ltd'}\n\n`;
   w+=`CHECKS: ${checks} logged\nSMOKE EVENTS: ${smoke===0?'None — COMPLIANT':smoke}\nODOUR EVENTS: ${odour===0?'None — COMPLIANT':odour}\nCOMPLAINTS: ${comp===0?'None':comp}\n\n`;
-  recs.filter(r=>r.smokeFlag).forEach((r,i)=>{w+=`SMOKE EVENT ${i+1}: ${fmtDate(r.timestamp)} ${fmtTime(r.timestamp)}\n  ${r.data.smoke_colour||'?'} smoke, ${r.data.smoke_duration||'?'}min, ${r.data.smoke_cause||'?'}\n  Action: ${r.data.smoke_action||'—'}\n  Operator: ${r.operator||'—'}\n\n`;});
+  recs.filter(r=>r.smokeFlag).forEach((r,i)=>{w+=`SMOKE EVENT ${i+1}: ${fmtDate(r.timestamp)} ${fmtTime(r.timestamp)}\n  ${r.data.smoke_colour||'?'} smoke, ${r.data.smoke_duration||'?'}min, ${r.data.smoke_cause||'?'}\n  Wind direction: ${r.data.smoke_wind_dir||'Not recorded'}\n  Action: ${r.data.smoke_action||'—'}\n  Operator: ${r.operator||'—'}\n\n`;});
   w+=`\nGenerated by GeT Energy PyroCheck — ${new Date().toISOString()}`;
   return w;
 }
@@ -1633,6 +1634,7 @@ async function generatePDF(type){
     doc.rect(ML,y,TW,6,'F');doc.text(`${r.checkLabel} · ${r.shift==='day'?'Day':'Night'} Shift · ${getInspectionDate(r)} ${getInspectionTime(r)} · Operator: ${r.operator||'—'}`,ML+2,y+4.5);
     y+=8;
     row('Stack smoke',r.smokeFlag?`YES — ${r.data.smoke_colour||'?'} · ${r.data.smoke_duration||'?'}min · Cause: ${r.data.smoke_cause||'?'} · Action: ${r.data.smoke_action||'—'}`:'No smoke observed',r.smokeFlag);
+    if(r.smokeFlag)row('Wind direction',r.data.smoke_wind_dir||'Not recorded',true);
     row('Odour',r.odourFlag?`YES — ${r.data.odour_type||'?'} · Intensity ${r.data.odour_intensity||'?'}/5 · Off-site: ${r.data.odour_offsite==='yes'?'YES':'No'}`:'No odour detected',r.odourFlag);
     row('Complaints',r.compFlag?`${r.data.comp_count||'1'} × ${r.data.comp_type||'?'} · ${r.data.comp_channel||'?'} · Response: ${r.data.comp_response||'—'}`:'None received',r.compFlag);
     row('Production events',r.evFlag?`YES — ${r.data.ev_type||'?'} (${r.data.ev_severity||'?'}) · ${r.data.ev_desc||'—'}`:'None recorded',r.evFlag);
@@ -1661,6 +1663,7 @@ async function generatePDF(type){
       const smokeDetail=(r.data.smoke_colour||'?')+', '+(r.data.smoke_duration||'?')+' min, '+(r.data.smoke_cause||'?')+exempt;
       const smokeAction='Action: '+(r.data.smoke_action||'—');
       row('Smoke',smokeDetail,!r.data.smoke_startup_exempt||r.data.smoke_startup_exempt!=='yes');
+      row('Wind direction',r.data.smoke_wind_dir||'Not recorded',true);
       row('',smokeAction,false);
     }
     if(r.odourFlag){
